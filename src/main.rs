@@ -1,23 +1,23 @@
-// #![allow(unused)]
+#![allow(unused)]
 
 use eframe::{App, egui};
-use egui::{Button, ColorImage, Pos2, Rect, StrokeKind, TextureHandle};
+use egui::{ColorImage, Pos2, Rect, StrokeKind, TextureHandle};
 use image::GenericImageView;
+
+mod toolbar;
+
+use toolbar::Tool;
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
     eframe::run_native(
         "Annotator",
         options,
-        Box::new(|cc| Ok(Box::new(AnnotatorApp::new(cc)))),
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::new(AnnotatorApp::new(cc))
+        )}),
     )
-}
-
-/// 工具栏
-#[derive(PartialEq)]
-enum Tool {
-    Select,
-    Rectangle,
 }
 
 struct AnnotatorApp {
@@ -83,16 +83,11 @@ impl AnnotatorApp {
             //     .arg(path)
             //     .spawn();
 
-            
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
 
-    fn draw_rect_on_image(
-        &self,
-        img: &mut image::RgbaImage,
-        rect: &Rect,
-    ) {
+    fn draw_rect_on_image(&self, img: &mut image::RgbaImage, rect: &Rect) {
         let color = image::Rgba([255, 0, 0, 255]); // 红色
 
         let min_x = rect.min.x as u32;
@@ -122,48 +117,13 @@ impl AnnotatorApp {
     }
 }
 
-impl AnnotatorApp {
-    fn toolbar(&mut self, ctx: &egui::Context) {
-        // 🔵 顶部工具栏
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-
-                let button_size = egui::vec2(32.0, 32.0);
-
-                if ui.add_sized(
-                    button_size,
-                    Button::selectable(
-                        self.current_tool == Tool::Select,
-                        "🖱",
-                    )
-                ).clicked() {
-                    self.current_tool = Tool::Select;
-                }
-
-                if ui.add_sized(
-                    button_size,
-                    Button::selectable(
-                        self.current_tool == Tool::Rectangle,
-                        "▭",
-                    )
-                )
-                .on_hover_text("Rectangle (R)")
-                .clicked() {
-                    self.current_tool = Tool::Rectangle;
-                }
-            });
-        });
-
-    }
-}
-
 impl App for AnnotatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 撤销
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z)) {
             self.rectangles.pop();
         }
-        
+
         // 撤销
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::S)) {
             self.save_image(ctx);
@@ -180,7 +140,6 @@ impl App for AnnotatorApp {
 
                 // 只有在矩形模式才允许画
                 if self.current_tool == Tool::Rectangle {
-
                     if response.drag_started() {
                         self.start_pos = response.interact_pointer_pos();
                     }
@@ -195,7 +154,6 @@ impl App for AnnotatorApp {
                         self.start_pos = None;
                     }
                 }
-
 
                 // 画已有矩形
                 for rect in &self.rectangles {
