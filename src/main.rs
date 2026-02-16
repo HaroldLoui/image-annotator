@@ -1,8 +1,8 @@
 #![allow(unused)]
 
 use eframe::{App, egui};
-use egui::{Color32, ColorImage, Pos2, Rect, Stroke, StrokeKind, TextureHandle};
-use image::GenericImageView;
+use egui::{Color32, ColorImage, Image, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
+use image::{DynamicImage, GenericImageView};
 
 mod color_picker;
 mod toolbar;
@@ -43,7 +43,7 @@ impl Into<f32> for LineWidth {
 
 struct AnnotatorApp {
     texture: Option<TextureHandle>,
-    image_size: egui::Vec2,
+    image_size: Vec2,
     image_path: Option<String>,
     current_tool: Tool,
     current_color: Color32,
@@ -51,6 +51,10 @@ struct AnnotatorApp {
     start_pos: Option<Pos2>,
     rectangles: Vec<Rect>,
     color_picker: ColorPickerButton,
+    display_scale: f32,
+    zoom: f32,
+    pan: Vec2,
+    last_image_rect_min: Option<Pos2>,
 }
 
 impl AnnotatorApp {
@@ -60,17 +64,12 @@ impl AnnotatorApp {
         let mut texture = None;
         let mut image_size = egui::Vec2::ZERO;
         let mut image_path = None;
+        let mut display_scale = 1.0;
 
         if args.len() > 1 {
             image_path = Some(args[1].clone());
-            let img = image::open(&args[1]).expect("Failed to open image");
-            let size = img.dimensions();
-            image_size = egui::vec2(size.0 as f32, size.1 as f32);
-
-            let rgba = img.to_rgba8();
-            let color_image =
-                ColorImage::from_rgba_unmultiplied([size.0 as usize, size.1 as usize], &rgba);
-
+            let (color_image, scale) = scale_color_image(&args[1], &mut image_size);
+            display_scale = scale;
             texture = Some(cc.egui_ctx.load_texture(
                 "loaded_image",
                 color_image,
@@ -88,6 +87,10 @@ impl AnnotatorApp {
             start_pos: None,
             rectangles: Vec::new(),
             color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
+            display_scale,
+            zoom: 1.0,
+            pan: Vec2::ZERO,
+            last_image_rect_min: None,
         }
     }
 
@@ -117,10 +120,12 @@ impl AnnotatorApp {
     fn draw_rect_on_image(&self, img: &mut image::RgbaImage, rect: &Rect) {
         let color = image::Rgba([255, 0, 0, 255]); // 红色
 
-        let min_x = rect.min.x as u32;
-        let min_y = rect.min.y as u32;
-        let max_x = rect.max.x as u32;
-        let max_y = rect.max.y as u32;
+        let inv_scale = 1.0 / self.display_scale;
+
+        let min_x = (rect.min.x * inv_scale) as u32;
+        let min_y = (rect.min.y * inv_scale) as u32;
+        let max_x = (rect.max.x * inv_scale) as u32;
+        let max_y = (rect.max.y * inv_scale) as u32;
 
         // 上下边
         for x in min_x..max_x {
@@ -142,10 +147,94 @@ impl AnnotatorApp {
             }
         }
     }
+
+    fn screen_to_image(
+        &self,
+        pos: egui::Pos2,
+        image_rect: egui::Rect,
+    ) -> egui::Pos2 {
+        (Pos2::ZERO + (pos - image_rect.min)) / self.zoom
+    }
+
+    fn reset_view(&mut self, available_rect: egui::Rect) {
+        self.zoom = 1.0;
+
+        // 居中图片
+        let image_size = self.texture.as_ref().unwrap().size_vec2();
+
+        let center_offset =
+            (available_rect.size() - image_size) / 2.0;
+
+        self.pan = center_offset;
+    }
+
+
+}
+
+fn scale_color_image(path: &str, image_size: &mut Vec2) -> (ColorImage, f32) {
+
+    let img = image::open(path).expect("Failed to open image").to_rgba8();
+    let (w, h) = img.dimensions();
+
+    let max_size = 2048u32;
+
+    let scale = if w > max_size || h > max_size {
+        let scale_w = max_size as f32 / w as f32;
+        let scale_h = max_size as f32 / h as f32;
+        scale_w.min(scale_h)
+    } else {
+        1.0
+    };
+
+    let display_img = if scale < 1.0 {
+        image::imageops::resize(
+            &img,
+            (w as f32 * scale) as u32,
+            (h as f32 * scale) as u32,
+            image::imageops::FilterType::Lanczos3,
+        )
+    } else {
+        img.clone()
+    };
+
+    let size = display_img.dimensions();
+    *image_size = egui::vec2(size.0 as f32, size.1 as f32);
+
+    let rgba = display_img.into_raw();
+    let color_image = ColorImage::from_rgba_unmultiplied(
+        [size.0 as usize, size.1 as usize],
+        &rgba,
+    );
+    (color_image, scale)
 }
 
 impl App for AnnotatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 处理缩放（Ctrl + 鼠标滚轮）
+        let scroll = ctx.input(|i| i.raw_scroll_delta.y);
+
+        if ctx.input(|i| i.modifiers.ctrl) && scroll != 0.0 {
+            if let Some(mouse_pos) = ctx.input(|i| i.pointer.hover_pos()) {
+
+                let old_zoom = self.zoom;
+
+                let zoom_speed = 0.0015; 
+                let new_zoom = (old_zoom * (scroll * zoom_speed).exp()).clamp(0.05, 20.0);
+
+                // 当前图片左上角
+                let image_min = self.last_image_rect_min.unwrap_or(Pos2::ZERO);
+
+                // 鼠标对应的图片坐标（缩放前）
+                let image_pos = (mouse_pos - image_min) / old_zoom;
+
+                // 更新 zoom
+                self.zoom = new_zoom;
+
+                // 重新计算 pan，使鼠标指向位置不变
+                self.pan += image_pos * (old_zoom - new_zoom);
+            }
+        }
+
         // 撤销
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z)) {
             self.rectangles.pop();
@@ -161,9 +250,47 @@ impl App for AnnotatorApp {
         // 🟢 主画布
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture {
-                let response =
-                    ui.add(egui::Image::new(texture).sense(egui::Sense::click_and_drag()));
-                let painter = ui.painter_at(response.rect);
+                let image_size = texture.size_vec2() * self.zoom;
+
+                // 分配可交互区域
+                let (response, painter) =
+                    ui.allocate_painter(image_size, Sense::click_and_drag());
+
+                // 应用平移
+                let image_rect = Rect::from_min_size(
+                    response.rect.min + self.pan,
+                    image_size,
+                );
+                self.last_image_rect_min = Some(image_rect.min);
+
+                // 绘制图片
+                painter.image(
+                    texture.id(),
+                    image_rect,
+                    Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+
+                // Ctrl + 左键拖动画布平移
+                if self.current_tool == Tool::Select && ctx.input(|i| i.modifiers.ctrl) && response.dragged_by(egui::PointerButton::Primary) {
+                    self.pan += response.drag_delta();
+                }
+
+                if let Some(pos) = response.hover_pos() {
+                    let image_pos = self.screen_to_image(pos, image_rect);
+
+                    ui.ctx().debug_painter().text(
+                        pos,
+                        egui::Align2::LEFT_TOP,
+                        format!("Image: {:.1}, {:.1}", image_pos.x, image_pos.y),
+                        egui::FontId::monospace(12.0),
+                        Color32::YELLOW,
+                    );
+                }
+
+                if response.double_clicked() {
+                    self.reset_view(response.rect);
+                }
 
                 // 只有在矩形模式才允许画
                 if self.current_tool == Tool::Rectangle {
