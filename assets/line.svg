@@ -1,0 +1,6 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <g transform="rotate(45 12 12)">
+    <line x1="19" y1="19" x2="5" y2="5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" fill="none"/>
+    <line x1="19" y1="5" x2="5" y2="19" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" fill="none"/>
+  </g>
+</svg>

@@ -1,12 +1,14 @@
 #![allow(unused)]
 
 use eframe::{App, egui};
-use egui::{ColorImage, Pos2, Rect, StrokeKind, TextureHandle};
+use egui::{Color32, ColorImage, Pos2, Rect, Stroke, StrokeKind, TextureHandle};
 use image::GenericImageView;
 
+mod color_picker;
 mod toolbar;
 
 use toolbar::Tool;
+use color_picker::ColorPickerButton;
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -20,13 +22,35 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LineWidth {
+    ONE,
+    THREE,
+    FIVE,
+    Custom(f32)
+}
+
+impl Into<f32> for LineWidth {
+    fn into(self) -> f32 {
+        match self {
+            LineWidth::ONE => 1f32,
+            LineWidth::THREE => 3f32,
+            LineWidth::FIVE => 5f32,
+            LineWidth::Custom(x) => x,
+        }
+    }
+}
+
 struct AnnotatorApp {
     texture: Option<TextureHandle>,
     image_size: egui::Vec2,
     image_path: Option<String>,
     current_tool: Tool,
+    current_color: Color32,
+    line_width: LineWidth,
     start_pos: Option<Pos2>,
     rectangles: Vec<Rect>,
+    color_picker: ColorPickerButton,
 }
 
 impl AnnotatorApp {
@@ -59,8 +83,11 @@ impl AnnotatorApp {
             image_size,
             image_path,
             current_tool: Tool::Rectangle,
+            current_color: Color32::WHITE,
+            line_width: LineWidth::THREE,
             start_pos: None,
             rectangles: Vec::new(),
+            color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
         }
     }
 
@@ -160,7 +187,7 @@ impl App for AnnotatorApp {
                     painter.rect_stroke(
                         *rect,
                         0.0,
-                        egui::Stroke::new(2.0, egui::Color32::RED),
+                        Stroke::new(self.line_width, self.current_color),
                         StrokeKind::Middle,
                     );
                 }
@@ -174,7 +201,7 @@ impl App for AnnotatorApp {
                         painter.rect_stroke(
                             rect,
                             0.0,
-                            egui::Stroke::new(2.0, egui::Color32::GREEN),
+                            Stroke::new(self.line_width, egui::Color32::GREEN),
                             StrokeKind::Middle,
                         );
                     }
