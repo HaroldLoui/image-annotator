@@ -5,10 +5,12 @@ use egui::{Color32, ColorImage, Image, Pos2, Rect, Sense, Stroke, StrokeKind, Te
 use image::{DynamicImage, GenericImageView};
 
 mod color_picker;
+mod operators;
 mod toolbar;
 
-use toolbar::Tool;
 use color_picker::ColorPickerButton;
+use operators::{Operator, ToolType};
+use toolbar::Tool;
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -49,7 +51,7 @@ struct AnnotatorApp {
     current_color: Color32,
     line_width: LineWidth,
     start_pos: Option<Pos2>,
-    rectangles: Vec<Rect>,
+    operators: Vec<Operator>,
     color_picker: ColorPickerButton,
     display_scale: f32,
     zoom: f32,
@@ -85,7 +87,7 @@ impl AnnotatorApp {
             current_color: Color32::WHITE,
             line_width: LineWidth::THREE,
             start_pos: None,
-            rectangles: Vec::new(),
+            operators: Vec::new(),
             color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
             display_scale,
             zoom: 1.0,
@@ -100,8 +102,8 @@ impl AnnotatorApp {
                 .expect("Failed to reopen image")
                 .to_rgba8();
 
-            for rect in &self.rectangles {
-                self.draw_rect_on_image(&mut img, rect);
+            for op in &self.operators {
+                op.draw_on_image(self, &mut img);
             }
 
             img.save(path).expect("Failed to save image");
@@ -117,57 +119,26 @@ impl AnnotatorApp {
         }
     }
 
-    fn draw_rect_on_image(&self, img: &mut image::RgbaImage, rect: &Rect) {
-        let color = image::Rgba([255, 0, 0, 255]); // 红色
-
-        let inv_scale = 1.0 / self.display_scale;
-
-        let min_x = (rect.min.x * inv_scale) as u32;
-        let min_y = (rect.min.y * inv_scale) as u32;
-        let max_x = (rect.max.x * inv_scale) as u32;
-        let max_y = (rect.max.y * inv_scale) as u32;
-
-        // 上下边
-        for x in min_x..max_x {
-            if min_y < img.height() {
-                img.put_pixel(x, min_y, color);
-            }
-            if max_y < img.height() {
-                img.put_pixel(x, max_y, color);
-            }
-        }
-
-        // 左右边
-        for y in min_y..max_y {
-            if min_x < img.width() {
-                img.put_pixel(min_x, y, color);
-            }
-            if max_x < img.width() {
-                img.put_pixel(max_x, y, color);
-            }
-        }
-    }
-
-    fn screen_to_image(
-        &self,
-        pos: egui::Pos2,
-        image_rect: egui::Rect,
-    ) -> egui::Pos2 {
+    fn screen_to_image(&self, pos: Pos2, image_rect: Rect) -> Pos2 {
         (Pos2::ZERO + (pos - image_rect.min)) / self.zoom
     }
 
-    fn reset_view(&mut self, available_rect: egui::Rect) {
-        self.zoom = 1.0;
+    fn reset_view(&mut self, available_rect: Rect) {
+        if let Some(texture) = &self.texture {
 
-        // 居中图片
-        let image_size = self.texture.as_ref().unwrap().size_vec2();
+            let image_size = texture.size_vec2();
+            let panel_size = available_rect.size();
 
-        let center_offset =
-            (available_rect.size() - image_size) / 2.0;
+            let scale_x = panel_size.x / image_size.x;
+            let scale_y = panel_size.y / image_size.y;
 
-        self.pan = center_offset;
+            self.zoom = scale_x.min(scale_y);
+
+            let new_size = image_size * self.zoom;
+
+            self.pan = (panel_size - new_size) / 2.0;
+        }
     }
-
 
 }
 
@@ -212,10 +183,8 @@ impl App for AnnotatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 处理缩放（Ctrl + 鼠标滚轮）
         let scroll = ctx.input(|i| i.raw_scroll_delta.y);
-
         if ctx.input(|i| i.modifiers.ctrl) && scroll != 0.0 {
             if let Some(mouse_pos) = ctx.input(|i| i.pointer.hover_pos()) {
-
                 let old_zoom = self.zoom;
 
                 let zoom_speed = 0.0015; 
@@ -237,17 +206,17 @@ impl App for AnnotatorApp {
 
         // 撤销
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z)) {
-            self.rectangles.pop();
+            self.operators.pop();
         }
 
-        // 撤销
+        // 保存
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::S)) {
             self.save_image(ctx);
         }
 
         self.toolbar(ctx);
 
-        // 🟢 主画布
+        // 主画布
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture {
                 let image_size = texture.size_vec2() * self.zoom;
@@ -303,20 +272,16 @@ impl App for AnnotatorApp {
                             (self.start_pos, response.interact_pointer_pos())
                         {
                             let rect = Rect::from_two_pos(start, end);
-                            self.rectangles.push(rect);
+                            let op = Operator::new(ToolType::Rect(rect), self.line_width, self.current_color);
+                            self.operators.push(op);
                         }
                         self.start_pos = None;
                     }
                 }
 
                 // 画已有矩形
-                for rect in &self.rectangles {
-                    painter.rect_stroke(
-                        *rect,
-                        0.0,
-                        Stroke::new(self.line_width, self.current_color),
-                        StrokeKind::Middle,
-                    );
+                for op in &self.operators {
+                    op.draw(&painter);
                 }
 
                 // 画当前拖动
@@ -325,12 +290,8 @@ impl App for AnnotatorApp {
                         (self.start_pos, response.interact_pointer_pos())
                     {
                         let rect = Rect::from_two_pos(start, current);
-                        painter.rect_stroke(
-                            rect,
-                            0.0,
-                            Stroke::new(self.line_width, egui::Color32::GREEN),
-                            StrokeKind::Middle,
-                        );
+                        let op = Operator::new(ToolType::Rect(rect), self.line_width, self.current_color);
+                        op.draw_process(&painter);
                     }
                 }
             } else {

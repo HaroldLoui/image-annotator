@@ -20,7 +20,7 @@ const DOT_3_ICON: &[u8] = include_bytes!("../assets/dot3.svg");
 const DOT_5_ICON: &[u8] = include_bytes!("../assets/dot5.svg");
 
 /// 工具栏
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Tool {
     /// 选择
     Select,
