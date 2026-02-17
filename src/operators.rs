@@ -1,15 +1,17 @@
-use egui::{Color32, Painter, Rect, Stroke, StrokeKind, epaint::EllipseShape};
+use egui::{Color32, Painter, Pos2, Rect, Stroke, StrokeKind, epaint::{EllipseShape, PathShape, PathStroke}};
 use image::{Rgba, RgbaImage};
 
 use crate::{AnnotatorApp, StrokeWidth};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolType {
     Rect(Rect),
     Ellipse(EllipseShape),
+    Arraw(PathShape),
+    Line(Pos2, Pos2),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Operator {
     /// 当前操作的工具类型
     pub tool: ToolType,
@@ -27,7 +29,10 @@ impl Operator {
     pub fn draw(&self, app: &AnnotatorApp, painter: &Painter) {
         let image_rect = app.last_image_rect.unwrap();
         let zoom = app.zoom;
-        match self.tool {
+
+        let width = self.stroke_width;
+        let color = self.color;
+        match &self.tool {
             ToolType::Rect(rect) => {
                 let screen_rect = Rect::from_min_max(
                     image_rect.min + rect.min.to_vec2() * zoom,
@@ -36,7 +41,7 @@ impl Operator {
                 painter.rect_stroke(
                     screen_rect,
                     0.0,
-                    Stroke::new(self.stroke_width, self.color),
+                    Stroke::new(width, color),
                     StrokeKind::Middle,
                 );
             },
@@ -51,7 +56,13 @@ impl Operator {
                     stroke: ellipse.stroke,
                 };
                 painter.add(screen_ellipse);
-            }
+            },
+            ToolType::Arraw(_) => {},
+            ToolType::Line(s, e) => {
+                let start = image_rect.min + s.to_vec2() * zoom;
+                let end = image_rect.min + e.to_vec2() * zoom;
+                painter.line(vec![start, end], PathStroke::new(width, color));
+            },
         }
     }
 }

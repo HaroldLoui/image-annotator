@@ -3,7 +3,8 @@
 use eframe::{App, egui};
 use egui::{
     Color32, ColorImage, Image, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind,
-    TextureHandle, Vec2, epaint::EllipseShape,
+    TextureHandle, Vec2,
+    epaint::{EllipseShape, PathShape, PathStroke},
 };
 use image::{DynamicImage, GenericImageView};
 
@@ -149,7 +150,7 @@ impl AnnotatorApp {
     fn drag_event(&mut self, response: &Response) {
         match self.current_tool {
             Tool::Select => {}
-            Tool::Rectangle | Tool::Circle => {
+            Tool::Rectangle | Tool::Circle | Tool::Line => {
                 if response.drag_started() {
                     self.start_pos = response.interact_pointer_pos();
                 }
@@ -165,7 +166,6 @@ impl AnnotatorApp {
                 }
             }
             Tool::Arrow => todo!(),
-            Tool::Line => todo!(),
             Tool::Pencil => todo!(),
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
@@ -177,7 +177,7 @@ impl AnnotatorApp {
     fn drag_event_process(&self, response: &Response, painter: &Painter) {
         match self.current_tool {
             Tool::Select => {}
-            Tool::Rectangle | Tool::Circle => {
+            Tool::Rectangle | Tool::Circle | Tool::Line => {
                 if let (Some(start), Some(current)) =
                     (self.start_pos, response.interact_pointer_pos())
                 {
@@ -186,7 +186,6 @@ impl AnnotatorApp {
                 }
             }
             Tool::Arrow => todo!(),
-            Tool::Line => todo!(),
             Tool::Pencil => todo!(),
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
@@ -204,12 +203,14 @@ impl AnnotatorApp {
         let start_img = self.screen_to_image(start_pos, image_rect);
         let end_img = self.screen_to_image(end_pos, image_rect);
 
+        let width = self.stroke_width;
+        let color = self.current_color;
         match self.current_tool {
             Tool::Select => None,
             Tool::Rectangle => {
                 let rect = Rect::from_two_pos(start_img, end_img);
-                Some(Operator::new(ToolType::Rect(rect), self.stroke_width, self.current_color))
-            },
+                Some(Operator::new(ToolType::Rect(rect), width, color))
+            }
             Tool::Circle => {
                 let radius = Vec2::new(
                     (end_img.x - start_img.x).abs() / 2.0,
@@ -223,16 +224,23 @@ impl AnnotatorApp {
                     center,
                     radius,
                     fill: Color32::TRANSPARENT,
-                    stroke: Stroke::new(self.stroke_width, self.current_color),
+                    stroke: Stroke::new(width, color),
                 };
-                Some(Operator::new(
-                    ToolType::Ellipse(e),
-                    self.stroke_width,
-                    self.current_color,
-                ))
+                Some(Operator::new(ToolType::Ellipse(e), width, color))
+            }
+            Tool::Arrow => {
+                // TODO:
+                PathShape {
+                    points: vec![],
+                    closed: true,
+                    fill: color,
+                    stroke: PathStroke::new(width, color),
+                };
+                None
+            }
+            Tool::Line => {
+                Some(Operator::new(ToolType::Line(start_img, end_img), width, color))
             },
-            Tool::Arrow => todo!(),
-            Tool::Line => todo!(),
             Tool::Pencil => todo!(),
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
