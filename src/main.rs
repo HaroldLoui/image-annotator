@@ -1,14 +1,19 @@
 #![allow(unused)]
 
 use eframe::{App, egui};
-use egui::{Color32, ColorImage, Image, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2};
+use egui::{
+    Color32, ColorImage, Image, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind,
+    TextureHandle, Vec2, epaint::EllipseShape,
+};
 use image::{DynamicImage, GenericImageView};
 
 mod color_picker;
+mod drawable;
 mod operators;
 mod toolbar;
 
 use color_picker::ColorPickerButton;
+use drawable::Draw;
 use operators::{Operator, ToolType};
 use toolbar::Tool;
 
@@ -19,8 +24,8 @@ fn main() -> Result<(), eframe::Error> {
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
-            Ok(Box::new(AnnotatorApp::new(cc))
-        )}),
+            Ok(Box::new(AnnotatorApp::new(cc)))
+        }),
     )
 }
 
@@ -29,7 +34,7 @@ pub enum StrokeWidth {
     ONE,
     THREE,
     FIVE,
-    Custom(f32)
+    Custom(f32),
 }
 
 impl Into<f32> for StrokeWidth {
@@ -56,7 +61,7 @@ struct AnnotatorApp {
     display_scale: f32,
     zoom: f32,
     pan: Vec2,
-    last_image_rect_min: Option<Pos2>,
+    last_image_rect: Option<Rect>,
 }
 
 impl AnnotatorApp {
@@ -92,7 +97,7 @@ impl AnnotatorApp {
             display_scale,
             zoom: 1.0,
             pan: Vec2::ZERO,
-            last_image_rect_min: None,
+            last_image_rect: None,
         }
     }
 
@@ -120,12 +125,11 @@ impl AnnotatorApp {
     }
 
     fn screen_to_image(&self, pos: Pos2, image_rect: Rect) -> Pos2 {
-        (Pos2::ZERO + (pos - image_rect.min)) / self.zoom
+        (pos - image_rect.min).to_pos2() / self.zoom
     }
 
     fn reset_view(&mut self, available_rect: Rect) {
         if let Some(texture) = &self.texture {
-
             let image_size = texture.size_vec2();
             let panel_size = available_rect.size();
 
@@ -139,11 +143,106 @@ impl AnnotatorApp {
             self.pan = (panel_size - new_size) / 2.0;
         }
     }
+}
 
+impl AnnotatorApp {
+    fn drag_event(&mut self, response: &Response) {
+        match self.current_tool {
+            Tool::Select => {}
+            Tool::Rectangle | Tool::Circle => {
+                if response.drag_started() {
+                    self.start_pos = response.interact_pointer_pos();
+                }
+
+                if response.drag_stopped() {
+                    if let (Some(start), Some(end)) =
+                        (self.start_pos, response.interact_pointer_pos())
+                    {
+                        let op = self.get_operator(start, end).unwrap();
+                        self.operators.push(op);
+                    }
+                    self.start_pos = None;
+                }
+            }
+            Tool::Arrow => todo!(),
+            Tool::Line => todo!(),
+            Tool::Pencil => todo!(),
+            Tool::Number => todo!(),
+            Tool::Emoji => todo!(),
+            Tool::Text => todo!(),
+            Tool::Masaic => todo!(),
+        }
+    }
+
+    fn drag_event_process(&self, response: &Response, painter: &Painter) {
+        match self.current_tool {
+            Tool::Select => {}
+            Tool::Rectangle | Tool::Circle => {
+                if let (Some(start), Some(current)) =
+                    (self.start_pos, response.interact_pointer_pos())
+                {
+                    let op = self.get_operator(start, current).unwrap();
+                    op.draw(self, painter);
+                }
+            }
+            Tool::Arrow => todo!(),
+            Tool::Line => todo!(),
+            Tool::Pencil => todo!(),
+            Tool::Number => todo!(),
+            Tool::Emoji => todo!(),
+            Tool::Text => todo!(),
+            Tool::Masaic => todo!(),
+        }
+    }
+
+    fn get_operator(&self, start_pos: Pos2, end_pos: Pos2) -> Option<Operator> {
+        // 获取当前 image_rect（需要存下来）
+        let image_rect_min = self.last_image_rect.map_or(Pos2::ZERO, |r| r.min);
+        let image_rect = Rect::from_min_size(image_rect_min, self.image_size * self.zoom);
+
+        // 转换为图片坐标
+        let start_img = self.screen_to_image(start_pos, image_rect);
+        let end_img = self.screen_to_image(end_pos, image_rect);
+
+        match self.current_tool {
+            Tool::Select => None,
+            Tool::Rectangle => {
+                let rect = Rect::from_two_pos(start_img, end_img);
+                Some(Operator::new(ToolType::Rect(rect), self.stroke_width, self.current_color))
+            },
+            Tool::Circle => {
+                let radius = Vec2::new(
+                    (end_img.x - start_img.x).abs() / 2.0,
+                    (end_img.y - start_img.y).abs() / 2.0,
+                );
+                let center = Pos2::new(
+                    (start_img.x + end_img.x) / 2.0,
+                    (start_img.y + end_img.y) / 2.0,
+                );
+                let e = EllipseShape {
+                    center,
+                    radius,
+                    fill: Color32::TRANSPARENT,
+                    stroke: Stroke::new(self.stroke_width, self.current_color),
+                };
+                Some(Operator::new(
+                    ToolType::Ellipse(e),
+                    self.stroke_width,
+                    self.current_color,
+                ))
+            },
+            Tool::Arrow => todo!(),
+            Tool::Line => todo!(),
+            Tool::Pencil => todo!(),
+            Tool::Number => todo!(),
+            Tool::Emoji => todo!(),
+            Tool::Text => todo!(),
+            Tool::Masaic => todo!(),
+        }
+    }
 }
 
 fn scale_color_image(path: &str, image_size: &mut Vec2) -> (ColorImage, f32) {
-
     let img = image::open(path).expect("Failed to open image").to_rgba8();
     let (w, h) = img.dimensions();
 
@@ -172,10 +271,7 @@ fn scale_color_image(path: &str, image_size: &mut Vec2) -> (ColorImage, f32) {
     *image_size = egui::vec2(size.0 as f32, size.1 as f32);
 
     let rgba = display_img.into_raw();
-    let color_image = ColorImage::from_rgba_unmultiplied(
-        [size.0 as usize, size.1 as usize],
-        &rgba,
-    );
+    let color_image = ColorImage::from_rgba_unmultiplied([size.0 as usize, size.1 as usize], &rgba);
     (color_image, scale)
 }
 
@@ -187,11 +283,11 @@ impl App for AnnotatorApp {
             if let Some(mouse_pos) = ctx.input(|i| i.pointer.hover_pos()) {
                 let old_zoom = self.zoom;
 
-                let zoom_speed = 0.0015; 
+                let zoom_speed = 0.0015;
                 let new_zoom = (old_zoom * (scroll * zoom_speed).exp()).clamp(0.05, 20.0);
 
                 // 当前图片左上角
-                let image_min = self.last_image_rect_min.unwrap_or(Pos2::ZERO);
+                let image_min = self.last_image_rect.map_or(Pos2::ZERO, |r| r.min);
 
                 // 鼠标对应的图片坐标（缩放前）
                 let image_pos = (mouse_pos - image_min) / old_zoom;
@@ -222,15 +318,11 @@ impl App for AnnotatorApp {
                 let image_size = texture.size_vec2() * self.zoom;
 
                 // 分配可交互区域
-                let (response, painter) =
-                    ui.allocate_painter(image_size, Sense::click_and_drag());
+                let (response, painter) = ui.allocate_painter(image_size, Sense::click_and_drag());
 
                 // 应用平移
-                let image_rect = Rect::from_min_size(
-                    response.rect.min + self.pan,
-                    image_size,
-                );
-                self.last_image_rect_min = Some(image_rect.min);
+                let image_rect = Rect::from_min_size(response.rect.min + self.pan, image_size);
+                self.last_image_rect = Some(image_rect);
 
                 // 绘制图片
                 painter.image(
@@ -241,7 +333,10 @@ impl App for AnnotatorApp {
                 );
 
                 // Ctrl + 左键拖动画布平移
-                if self.current_tool == Tool::Select && ctx.input(|i| i.modifiers.ctrl) && response.dragged_by(egui::PointerButton::Primary) {
+                if self.current_tool == Tool::Select
+                    && ctx.input(|i| i.modifiers.ctrl)
+                    && response.dragged_by(egui::PointerButton::Primary)
+                {
                     self.pan += response.drag_delta();
                 }
 
@@ -261,39 +356,16 @@ impl App for AnnotatorApp {
                     self.reset_view(response.rect);
                 }
 
-                // 只有在矩形模式才允许画
-                if self.current_tool == Tool::Rectangle {
-                    if response.drag_started() {
-                        self.start_pos = response.interact_pointer_pos();
-                    }
+                // 根据工具进行拖拽绘制
+                self.drag_event(&response);
 
-                    if response.drag_stopped() {
-                        if let (Some(start), Some(end)) =
-                            (self.start_pos, response.interact_pointer_pos())
-                        {
-                            let rect = Rect::from_two_pos(start, end);
-                            let op = Operator::new(ToolType::Rect(rect), self.stroke_width, self.current_color);
-                            self.operators.push(op);
-                        }
-                        self.start_pos = None;
-                    }
-                }
-
-                // 画已有矩形
+                // 画已有标注
                 for op in &self.operators {
-                    op.draw(&painter);
+                    op.draw(self, &painter);
                 }
 
-                // 画当前拖动
-                if self.current_tool == Tool::Rectangle {
-                    if let (Some(start), Some(current)) =
-                        (self.start_pos, response.interact_pointer_pos())
-                    {
-                        let rect = Rect::from_two_pos(start, current);
-                        let op = Operator::new(ToolType::Rect(rect), self.stroke_width, self.current_color);
-                        op.draw_process(&painter);
-                    }
-                }
+                // 画拖动过程
+                self.drag_event_process(&response, &painter);
             } else {
                 ui.label("请在命令行传入图片路径");
             }

@@ -64,6 +64,7 @@ impl Tool {
 impl crate::AnnotatorApp {
     const BUTTON_SIZE: Vec2 = egui::vec2(36.0, 36.0);
 
+    /// 工具栏绘制函数
     pub fn toolbar(&mut self, ctx: &Context) {
         // 顶部工具栏
         TopBottomPanel::top("toolbar")
