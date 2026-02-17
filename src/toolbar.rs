@@ -1,6 +1,6 @@
 use egui::{Button, Color32, Context, Frame, Image, Margin, TopBottomPanel, Ui, Vec2, Window};
 
-use crate::{LineWidth, color_picker::ColorPickerButton};
+use crate::{StrokeWidth, color_picker::ColorPickerButton};
 
 const SELECT_ICON: &[u8] = include_bytes!("../assets/select.svg");
 const RECT_ICON: &[u8] = include_bytes!("../assets/rect.svg");
@@ -88,9 +88,9 @@ impl crate::AnnotatorApp {
                             self.toolbar_button(ui, Tool::Masaic);
                             ui.separator();
 
-                            self.line_width_button(ui, LineWidth::ONE);
-                            self.line_width_button(ui, LineWidth::THREE);
-                            self.line_width_button(ui, LineWidth::FIVE);
+                            self.line_width_button(ui, StrokeWidth::ONE);
+                            self.line_width_button(ui, StrokeWidth::THREE);
+                            self.line_width_button(ui, StrokeWidth::FIVE);
                             ui.separator();
 
                             if self.color_picker.ui(ui) {
@@ -125,16 +125,16 @@ impl crate::AnnotatorApp {
     }
 
     // 线宽选择按钮辅助函数
-    fn line_width_button(&mut self, ui: &mut Ui, lw: LineWidth) {
+    fn line_width_button(&mut self, ui: &mut Ui, lw: StrokeWidth) {
         let data = match lw {
-            LineWidth::ONE => ("bytes://dot1_icon.svg", DOT_1_ICON),
-            LineWidth::THREE => ("bytes://dot3_icon.svg", DOT_3_ICON),
-            LineWidth::FIVE => ("bytes://dot5_icon.svg", DOT_5_ICON),
-            LineWidth::Custom(_) => unreachable!(),
+            StrokeWidth::ONE => ("bytes://dot1_icon.svg", DOT_1_ICON),
+            StrokeWidth::THREE => ("bytes://dot3_icon.svg", DOT_3_ICON),
+            StrokeWidth::FIVE => ("bytes://dot5_icon.svg", DOT_5_ICON),
+            StrokeWidth::Custom(_) => unreachable!(),
         };
         let image = Image::from_bytes(data.0, data.1);
         let btn = Button::image(image)
-            .fill(if self.line_width == lw {
+            .fill(if self.stroke_width == lw {
                 Color32::from_rgb(60, 60, 80)
             } else {
                 Color32::from_rgb(40, 40, 50)
@@ -142,7 +142,7 @@ impl crate::AnnotatorApp {
             .min_size(Self::BUTTON_SIZE);
 
         if ui.add(btn).clicked() {
-            self.line_width = lw;
+            self.stroke_width = lw;
         }
     }
 }

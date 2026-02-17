@@ -1,7 +1,7 @@
 use egui::{Color32, Painter, Rect, Stroke, StrokeKind};
 use image::{Rgba, RgbaImage};
 
-use crate::LineWidth;
+use crate::StrokeWidth;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ToolType {
@@ -13,14 +13,14 @@ pub struct Operator {
     /// 当前操作的工具类型
     tool: ToolType,
     /// 当前操作时的线宽
-    line_width: LineWidth,
+    stroke_width: StrokeWidth,
     /// 当前操作时的颜色
     color: Color32,
 }
 
 impl Operator {
-    pub fn new(tool: ToolType, line_width: LineWidth, color: Color32) -> Self {
-        Operator { tool, line_width, color }
+    pub fn new(tool: ToolType, stroke_width: StrokeWidth, color: Color32) -> Self {
+        Operator { tool, stroke_width, color }
     }
 
     pub fn draw(&self, painter: &Painter) {
@@ -29,7 +29,7 @@ impl Operator {
                 painter.rect_stroke(
                     rect,
                     0.0,
-                    Stroke::new(self.line_width, self.color),
+                    Stroke::new(self.stroke_width, self.color),
                     StrokeKind::Middle,
                 );
             },
@@ -42,7 +42,7 @@ impl Operator {
                 painter.rect_stroke(
                     rect,
                     0.0,
-                    Stroke::new(self.line_width, self.color),
+                    Stroke::new(self.stroke_width, self.color),
                     StrokeKind::Middle,
                 );
             },
@@ -68,7 +68,7 @@ impl Operator {
         let max_x = rect.max.x.min(img_w as f32 - 1.0) as i32;
         let max_y = rect.max.y.min(img_h as f32 - 1.0) as i32;
 
-        let w: f32 = self.line_width.into();
+        let w: f32 = self.stroke_width.into();
         let thickness = (w / app.display_scale).round() as u32;
         let t = thickness as i32;
 

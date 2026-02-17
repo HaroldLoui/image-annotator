@@ -25,20 +25,20 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LineWidth {
+pub enum StrokeWidth {
     ONE,
     THREE,
     FIVE,
     Custom(f32)
 }
 
-impl Into<f32> for LineWidth {
+impl Into<f32> for StrokeWidth {
     fn into(self) -> f32 {
         match self {
-            LineWidth::ONE => 1f32,
-            LineWidth::THREE => 3f32,
-            LineWidth::FIVE => 5f32,
-            LineWidth::Custom(x) => x,
+            StrokeWidth::ONE => 1f32,
+            StrokeWidth::THREE => 3f32,
+            StrokeWidth::FIVE => 5f32,
+            StrokeWidth::Custom(x) => x,
         }
     }
 }
@@ -49,7 +49,7 @@ struct AnnotatorApp {
     image_path: Option<String>,
     current_tool: Tool,
     current_color: Color32,
-    line_width: LineWidth,
+    stroke_width: StrokeWidth,
     start_pos: Option<Pos2>,
     operators: Vec<Operator>,
     color_picker: ColorPickerButton,
@@ -85,7 +85,7 @@ impl AnnotatorApp {
             image_path,
             current_tool: Tool::Rectangle,
             current_color: Color32::WHITE,
-            line_width: LineWidth::THREE,
+            stroke_width: StrokeWidth::THREE,
             start_pos: None,
             operators: Vec::new(),
             color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
@@ -272,7 +272,7 @@ impl App for AnnotatorApp {
                             (self.start_pos, response.interact_pointer_pos())
                         {
                             let rect = Rect::from_two_pos(start, end);
-                            let op = Operator::new(ToolType::Rect(rect), self.line_width, self.current_color);
+                            let op = Operator::new(ToolType::Rect(rect), self.stroke_width, self.current_color);
                             self.operators.push(op);
                         }
                         self.start_pos = None;
@@ -290,7 +290,7 @@ impl App for AnnotatorApp {
                         (self.start_pos, response.interact_pointer_pos())
                     {
                         let rect = Rect::from_two_pos(start, current);
-                        let op = Operator::new(ToolType::Rect(rect), self.line_width, self.current_color);
+                        let op = Operator::new(ToolType::Rect(rect), self.stroke_width, self.current_color);
                         op.draw_process(&painter);
                     }
                 }
