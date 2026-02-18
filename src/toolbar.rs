@@ -77,19 +77,25 @@ impl crate::AnnotatorApp {
                     .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 0))
                     .inner_margin(Margin::same(8))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
+                        ui.horizontal_centered(|ui| {
                             ui.spacing_mut().item_spacing = egui::vec2(12.0, 0.0);
 
-                            self.toolbar_button(ui, Tool::Select);
-                            self.toolbar_button(ui, Tool::Rectangle);
-                            self.toolbar_button(ui, Tool::Circle);
-                            self.toolbar_button(ui, Tool::Arrow);
-                            self.toolbar_button(ui, Tool::Line);
-                            self.toolbar_button(ui, Tool::Pencil);
-                            self.toolbar_button(ui, Tool::Number);
-                            self.toolbar_button(ui, Tool::Emoji);
-                            self.toolbar_button(ui, Tool::Text);
-                            self.toolbar_button(ui, Tool::Masaic);
+                            ui.vertical(|ui| {
+                                ui.horizontal(|ui| {
+                                    self.toolbar_button(ui, Tool::Select);
+                                    self.toolbar_button(ui, Tool::Rectangle);
+                                    self.toolbar_button(ui, Tool::Circle);
+                                    self.toolbar_button(ui, Tool::Arrow);
+                                    self.toolbar_button(ui, Tool::Line);
+                                });
+                                ui.horizontal(|ui| {
+                                    self.toolbar_button(ui, Tool::Pencil);
+                                    self.toolbar_button(ui, Tool::Number);
+                                    self.toolbar_button(ui, Tool::Emoji);
+                                    self.toolbar_button(ui, Tool::Text);
+                                    self.toolbar_button(ui, Tool::Masaic);
+                                });
+                            });
                             ui.separator();
 
                             self.line_width_button(ui, StrokeWidth::ONE);
