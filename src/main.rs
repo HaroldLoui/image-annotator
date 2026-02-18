@@ -2,11 +2,10 @@
 
 use eframe::{App, egui};
 use egui::{
-    Color32, ColorImage, Image, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind,
+    Color32, ColorImage, Painter, Pos2, Rect, Response, Sense, Stroke, 
     TextureHandle, Vec2,
     epaint::{EllipseShape, PathShape, PathStroke},
 };
-use image::{DynamicImage, GenericImageView};
 
 mod color_picker;
 mod drawable;
@@ -15,6 +14,7 @@ mod toolbar;
 
 use color_picker::ColorPickerButton;
 use drawable::Draw;
+use image::RgbaImage;
 use operators::{Operator, ToolType};
 use toolbar::Tool;
 
@@ -53,6 +53,7 @@ struct AnnotatorApp {
     texture: Option<TextureHandle>,
     image_size: Vec2,
     image_path: Option<String>,
+    original_image: Option<RgbaImage>,
     current_tool: Tool,
     current_color: Color32,
     stroke_width: StrokeWidth,
@@ -73,22 +74,28 @@ impl AnnotatorApp {
         let mut image_size = egui::Vec2::ZERO;
         let mut image_path = None;
         let mut display_scale = 1.0;
+        let mut original_image = None;
 
         if args.len() > 1 {
             image_path = Some(args[1].clone());
-            let (color_image, scale) = scale_color_image(&args[1], &mut image_size);
+            let img = image::open(&args[1])
+                .expect("Failed to reopen image")
+                .to_rgba8();
+            let (color_image, scale) = scale_color_image(&img, &mut image_size);
             display_scale = scale;
             texture = Some(cc.egui_ctx.load_texture(
                 "loaded_image",
                 color_image,
                 Default::default(),
             ));
+            original_image = Some(img);
         }
 
         Self {
             texture,
             image_size,
             image_path,
+            original_image,
             current_tool: Tool::Rectangle,
             current_color: Color32::WHITE,
             stroke_width: StrokeWidth::THREE,
@@ -103,13 +110,11 @@ impl AnnotatorApp {
     }
 
     fn save_image(&self, ctx: &egui::Context) {
-        if let Some(path) = &self.image_path {
-            let mut img = image::open(path)
-                .expect("Failed to reopen image")
-                .to_rgba8();
+        if let (Some(path), Some(img)) = (&self.image_path, &self.original_image) {
+            let mut img = img.clone();
 
             for op in &self.operators {
-                op.draw_on_image(self, &mut img);
+                op.draw_on_image(&mut img);
             }
 
             img.save(path).expect("Failed to save image");
@@ -126,7 +131,7 @@ impl AnnotatorApp {
     }
 
     fn screen_to_image(&self, pos: Pos2, image_rect: Rect) -> Pos2 {
-        (pos - image_rect.min).to_pos2() / self.zoom
+        (pos - image_rect.min).to_pos2() / (self.zoom * self.display_scale)
     }
 
     fn reset_view(&mut self, available_rect: Rect) {
@@ -171,6 +176,7 @@ impl AnnotatorApp {
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
             Tool::Masaic => todo!(),
+            Tool::Pin => todo!(),
         }
     }
 
@@ -191,6 +197,7 @@ impl AnnotatorApp {
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
             Tool::Masaic => todo!(),
+            Tool::Pin => todo!(),
         }
     }
 
@@ -246,12 +253,13 @@ impl AnnotatorApp {
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
             Tool::Masaic => todo!(),
+            Tool::Pin => todo!(),
         }
     }
 }
 
-fn scale_color_image(path: &str, image_size: &mut Vec2) -> (ColorImage, f32) {
-    let img = image::open(path).expect("Failed to open image").to_rgba8();
+fn scale_color_image(img: &RgbaImage, image_size: &mut Vec2) -> (ColorImage, f32) {
+    // let img = image::open(path).expect("Failed to open image").to_rgba8();
     let (w, h) = img.dimensions();
 
     let max_size = 2048u32;
@@ -266,7 +274,7 @@ fn scale_color_image(path: &str, image_size: &mut Vec2) -> (ColorImage, f32) {
 
     let display_img = if scale < 1.0 {
         image::imageops::resize(
-            &img,
+            img,
             (w as f32 * scale) as u32,
             (h as f32 * scale) as u32,
             image::imageops::FilterType::Lanczos3,
@@ -323,14 +331,22 @@ impl App for AnnotatorApp {
         // 主画布
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(texture) = &self.texture {
+                // painter 占满整个面板，不随 zoom 变化
+                let available = ui.available_rect_before_wrap();
+                let (response, painter) = ui.allocate_painter(available.size(), Sense::click_and_drag());
+
+                // 图片的实际渲染区域
                 let image_size = texture.size_vec2() * self.zoom;
-
-                // 分配可交互区域
-                let (response, painter) = ui.allocate_painter(image_size, Sense::click_and_drag());
-
-                // 应用平移
-                let image_rect = Rect::from_min_size(response.rect.min + self.pan, image_size);
+                let image_rect = Rect::from_min_size(available.min + self.pan, image_size);
                 self.last_image_rect = Some(image_rect);
+
+                // 绘制图片
+                painter.image(
+                    texture.id(),
+                    image_rect,
+                    Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
 
                 // 绘制图片
                 painter.image(

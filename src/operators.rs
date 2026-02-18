@@ -1,5 +1,4 @@
 use egui::{Color32, Painter, Pos2, Rect, Stroke, StrokeKind, epaint::{EllipseShape, PathShape, PathStroke}};
-use image::{Rgba, RgbaImage};
 
 use crate::{AnnotatorApp, StrokeWidth};
 
@@ -28,7 +27,7 @@ impl Operator {
 
     pub fn draw(&self, app: &AnnotatorApp, painter: &Painter) {
         let image_rect = app.last_image_rect.unwrap();
-        let zoom = app.zoom;
+        let zoom = app.zoom * app.display_scale;
 
         let width = self.stroke_width;
         let color = self.color;

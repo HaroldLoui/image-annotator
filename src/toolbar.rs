@@ -1,6 +1,6 @@
-use egui::{Button, Color32, Context, Frame, Image, Margin, TopBottomPanel, Ui, Vec2, Window};
+use egui::{Button, Color32, Context, Frame, Image, Margin, TopBottomPanel, Ui, Vec2};
 
-use crate::{StrokeWidth, color_picker::ColorPickerButton};
+use crate::StrokeWidth;
 
 const SELECT_ICON: &[u8] = include_bytes!("../assets/select.svg");
 const RECT_ICON: &[u8] = include_bytes!("../assets/rect.svg");
@@ -42,6 +42,8 @@ pub enum Tool {
     Text,
     /// 马赛克
     Masaic,
+    /// 铆钉
+    Pin,
 }
 
 impl Tool {
@@ -57,6 +59,7 @@ impl Tool {
             Tool::Emoji => ("bytes://emoji_icon.svg", EMOJI_ICON, "Emoji"),
             Tool::Text => ("bytes://text_icon.svg", TEXT_ICON, "Text"),
             Tool::Masaic => ("bytes://mosaic_icon.svg", MOSAIC_ICON, "Mosaic"),
+            Tool::Pin => ("bytes://pin_icon.svg", PIN_ICON, "Pin"),
         }
     }
 }

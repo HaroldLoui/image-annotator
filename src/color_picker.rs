@@ -34,12 +34,6 @@ impl ColorPickerButton {
         self.current_color
     }
 
-    /// 设置颜色
-    pub fn set_color(&mut self, color: Color32) {
-        self.current_color = color;
-        self.temp_color = color;
-    }
-
     /// 显示颜色选择器按钮
     /// 返回：(Response, Option<Color32>)
     /// - Response: 按钮的响应
@@ -275,14 +269,5 @@ impl ColorPickerButton {
     pub fn ui(&mut self, ui: &mut Ui) -> bool {
         let (_, changed) = self.show(ui);
         changed.is_some()
-    }
-
-    /// 带标签的版本
-    pub fn ui_with_label(&mut self, ui: &mut Ui, label: &str) -> Option<Color32> {
-        ui.horizontal(|ui| {
-            ui.label(label);
-            let (_, color) = self.show(ui);
-            color
-        }).inner
     }
 }

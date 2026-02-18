@@ -10,3 +10,4 @@ egui_extras = { version = "0.33.3", features = ["svg"] }
 image = "0.25.9"
 imageproc = "0.26.0"
 log = "0.4.29"
+tiny-skia = "0.12.0"
