@@ -6,7 +6,7 @@ use crate::{AnnotatorApp, StrokeWidth};
 pub enum ToolType {
     Rect(Rect),
     Ellipse(EllipseShape),
-    Arraw(PathShape),
+    Arrow(PathShape),
     Line(Pos2, Pos2),
 }
 
@@ -26,7 +26,7 @@ impl Operator {
     }
 
     pub fn draw(&self, app: &AnnotatorApp, painter: &Painter) {
-        let image_rect = app.last_image_rect.unwrap();
+        // let image_rect = app.last_image_rect.unwrap();
         let zoom = app.zoom * app.display_scale;
 
         let width = self.stroke_width;
@@ -34,8 +34,8 @@ impl Operator {
         match &self.tool {
             ToolType::Rect(rect) => {
                 let screen_rect = Rect::from_min_max(
-                    image_rect.min + rect.min.to_vec2() * zoom,
-                    image_rect.min + rect.max.to_vec2() * zoom,
+                    app.image_to_screen(rect.min),
+                    app.image_to_screen(rect.max),
                 );
                 painter.rect_stroke(
                     screen_rect,
@@ -45,7 +45,7 @@ impl Operator {
                 );
             },
             ToolType::Ellipse(ellipse) => {
-                let screen_center = image_rect.min + ellipse.center.to_vec2() * zoom;
+                let screen_center = app.image_to_screen(ellipse.center);
                 let screen_radius = ellipse.radius * zoom;
                 
                 let screen_ellipse = EllipseShape {
@@ -56,10 +56,18 @@ impl Operator {
                 };
                 painter.add(screen_ellipse);
             },
-            ToolType::Arraw(_) => {},
+            ToolType::Arrow(arrow) => {
+                let arrow = arrow.clone();
+                let points= arrow.points
+                    .iter()
+                    .map(|p| app.image_to_screen(*p))
+                    .collect();
+                let shape = PathShape { points, ..arrow };
+                painter.add(shape);
+            },
             ToolType::Line(s, e) => {
-                let start = image_rect.min + s.to_vec2() * zoom;
-                let end = image_rect.min + e.to_vec2() * zoom;
+                let start = app.image_to_screen(*s);
+                let end = app.image_to_screen(*e);
                 painter.line(vec![start, end], PathStroke::new(width, color));
             },
         }

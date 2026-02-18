@@ -1,4 +1,4 @@
-use egui::{Button, Color32, Context, Frame, Image, Margin, TopBottomPanel, Ui, Vec2};
+use egui::{Button, Color32, Context, Frame, Image, Margin, Pos2, TopBottomPanel, Ui, Vec2};
 
 use crate::StrokeWidth;
 
@@ -106,6 +106,11 @@ impl crate::AnnotatorApp {
                             if self.color_picker.ui(ui) {
                                 self.current_color = self.color_picker.color();
                             }
+                            ui.separator();
+
+                            self.toolbar_button(ui, Tool::Pin);
+                            self.toolbar_button(ui, Tool::Text);
+                            self.toolbar_button(ui, Tool::Masaic);
 
                             // 右侧：设置和操作按钮
                             ui.with_layout(
@@ -155,4 +160,36 @@ impl crate::AnnotatorApp {
             self.stroke_width = lw;
         }
     }
+}
+
+pub fn arrow_points(start: Pos2, end: Pos2, stroke: StrokeWidth) -> Vec<Pos2> {
+    let dir = end - start;
+    let len = dir.length();
+
+    if len <= f32::EPSILON {
+        return vec![];
+    }
+    let stroke: f32 = stroke.into();
+
+    let v = dir / len;
+    let n = Vec2::new(-v.y, v.x);
+
+    let head_len = stroke * 8.0;
+    let head_width = stroke * 5.0;
+    let shaft_width = stroke;
+
+    let head_base = end - v * head_len;
+
+    let p0 = end;
+
+    let p1 = head_base + n * (head_width * 0.5);
+    let p6 = head_base - n * (head_width * 0.5);
+
+    let p2 = head_base + n * (shaft_width * 0.5);
+    let p5 = head_base - n * (shaft_width * 0.5);
+
+    let p3 = start + n * (shaft_width * 0.5);
+    let p4 = start - n * (shaft_width * 0.5);
+
+    vec![p0, p1, p2, p3, p4, p5, p6]
 }

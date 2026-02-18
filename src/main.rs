@@ -4,8 +4,7 @@ use std::sync::mpsc::{self, Receiver};
 
 use eframe::{App, egui};
 use egui::{
-    Color32, ColorImage, Painter, Pos2, Rect, Response, Sense, Stroke, 
-    TextureHandle, Vec2,
+    Color32, ColorImage, Painter, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Vec2,
     epaint::{EllipseShape, PathShape, PathStroke},
 };
 
@@ -18,7 +17,7 @@ use color_picker::ColorPickerButton;
 use drawable::Draw;
 use image::RgbaImage;
 use operators::{Operator, ToolType};
-use toolbar::Tool;
+use toolbar::{Tool, arrow_points};
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -141,6 +140,11 @@ impl AnnotatorApp {
         (pos - image_rect.min).to_pos2() / (self.zoom * self.display_scale)
     }
 
+    fn image_to_screen(&self, p: Pos2) -> Pos2 {
+        let image_rect_min = self.last_image_rect.map_or(Pos2::ZERO, |r| r.min);
+        image_rect_min + p.to_vec2() * self.zoom
+    }
+
     fn reset_view(&mut self, available_rect: Rect) {
         if let Some(texture) = &self.texture {
             let image_size = texture.size_vec2();
@@ -162,7 +166,7 @@ impl AnnotatorApp {
     fn drag_event(&mut self, response: &Response) {
         match self.current_tool {
             Tool::Select => {}
-            Tool::Rectangle | Tool::Circle | Tool::Line => {
+            Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
                 if response.drag_started() {
                     self.start_pos = response.interact_pointer_pos();
                 }
@@ -177,7 +181,6 @@ impl AnnotatorApp {
                     self.start_pos = None;
                 }
             }
-            Tool::Arrow => todo!(),
             Tool::Pencil => todo!(),
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
@@ -190,7 +193,7 @@ impl AnnotatorApp {
     fn drag_event_process(&self, response: &Response, painter: &Painter) {
         match self.current_tool {
             Tool::Select => {}
-            Tool::Rectangle | Tool::Circle | Tool::Line => {
+            Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
                 if let (Some(start), Some(current)) =
                     (self.start_pos, response.interact_pointer_pos())
                 {
@@ -198,7 +201,6 @@ impl AnnotatorApp {
                     op.draw(self, painter);
                 }
             }
-            Tool::Arrow => todo!(),
             Tool::Pencil => todo!(),
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
@@ -214,26 +216,23 @@ impl AnnotatorApp {
         let image_rect = Rect::from_min_size(image_rect_min, self.image_size * self.zoom);
 
         // 转换为图片坐标
-        let start_img = self.screen_to_image(start_pos, image_rect);
-        let end_img = self.screen_to_image(end_pos, image_rect);
+        let start = self.screen_to_image(start_pos, image_rect);
+        let end = self.screen_to_image(end_pos, image_rect);
 
         let width = self.stroke_width;
         let color = self.current_color;
         match self.current_tool {
             Tool::Select => None,
             Tool::Rectangle => {
-                let rect = Rect::from_two_pos(start_img, end_img);
+                let rect = Rect::from_two_pos(start, end);
                 Some(Operator::new(ToolType::Rect(rect), width, color))
             }
             Tool::Circle => {
                 let radius = Vec2::new(
-                    (end_img.x - start_img.x).abs() / 2.0,
-                    (end_img.y - start_img.y).abs() / 2.0,
+                    (end.x - start.x).abs() / 2.0, 
+                    (end.y - start.y).abs() / 2.0
                 );
-                let center = Pos2::new(
-                    (start_img.x + end_img.x) / 2.0,
-                    (start_img.y + end_img.y) / 2.0,
-                );
+                let center = Pos2::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0);
                 let e = EllipseShape {
                     center,
                     radius,
@@ -243,18 +242,15 @@ impl AnnotatorApp {
                 Some(Operator::new(ToolType::Ellipse(e), width, color))
             }
             Tool::Arrow => {
-                // TODO:
-                PathShape {
-                    points: vec![],
+                let ps = PathShape {
+                    points: arrow_points(start, end, width),
                     closed: true,
                     fill: color,
                     stroke: PathStroke::new(width, color),
                 };
-                None
+                Some(Operator::new(ToolType::Arrow(ps), width, color))
             }
-            Tool::Line => {
-                Some(Operator::new(ToolType::Line(start_img, end_img), width, color))
-            },
+            Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color)),
             Tool::Pencil => todo!(),
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
@@ -304,7 +300,11 @@ impl App for AnnotatorApp {
             if let Ok((img, image_size, scale)) = rx.try_recv() {
                 let mut size = image_size;
                 let (color_image, _) = scale_color_image(&img, &mut size);
-                self.texture = Some(ctx.load_texture("loaded_image", color_image, Default::default()));
+                self.texture = Some(ctx.load_texture(
+                    "loaded_image", 
+                    color_image, 
+                    Default::default()
+                ));
                 self.image_size = image_size;
                 self.display_scale = scale;
                 self.original_image = Some(img);
@@ -352,7 +352,8 @@ impl App for AnnotatorApp {
             if let Some(texture) = &self.texture {
                 // painter 占满整个面板，不随 zoom 变化
                 let available = ui.available_rect_before_wrap();
-                let (response, painter) = ui.allocate_painter(available.size(), Sense::click_and_drag());
+                let (response, painter) =
+                    ui.allocate_painter(available.size(), Sense::click_and_drag());
 
                 // 图片的实际渲染区域
                 let image_size = texture.size_vec2() * self.zoom;
