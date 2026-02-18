@@ -1,4 +1,6 @@
-#![allow(unused)]
+// #![allow(unused)]
+
+use std::sync::mpsc::{self, Receiver};
 
 use eframe::{App, egui};
 use egui::{
@@ -50,62 +52,67 @@ impl Into<f32> for StrokeWidth {
 }
 
 struct AnnotatorApp {
+    // 显示
     texture: Option<TextureHandle>,
+    last_image_rect: Option<Rect>,
+    display_scale: f32,
+    zoom: f32,
+    pan: Vec2,
+    // 图片相关
     image_size: Vec2,
     image_path: Option<String>,
     original_image: Option<RgbaImage>,
+    image_receiver: Option<Receiver<(RgbaImage, Vec2, f32)>>,
+    // 工具相关
     current_tool: Tool,
+    color_picker: ColorPickerButton,
     current_color: Color32,
     stroke_width: StrokeWidth,
     start_pos: Option<Pos2>,
     operators: Vec<Operator>,
-    color_picker: ColorPickerButton,
-    display_scale: f32,
-    zoom: f32,
-    pan: Vec2,
-    last_image_rect: Option<Rect>,
 }
 
 impl AnnotatorApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // 从命令行读取图片路径
         let args: Vec<String> = std::env::args().collect();
-        let mut texture = None;
-        let mut image_size = egui::Vec2::ZERO;
         let mut image_path = None;
-        let mut display_scale = 1.0;
-        let mut original_image = None;
+        let mut image_receiver = None;
 
         if args.len() > 1 {
+            let (tx, rx) = mpsc::channel();
+            let ctx = cc.egui_ctx.clone();
+            let path = args[1].clone();
+
+            std::thread::spawn(move || {
+                let img = image::open(&path)
+                    .expect("Failed to reopen image")
+                    .to_rgba8();
+                let mut image_size = Vec2::ZERO;
+                let (_, scale) = scale_color_image(&img, &mut image_size); // 复用现有逻辑
+                tx.send((img, image_size, scale)).unwrap();
+                ctx.request_repaint(); // 通知 UI 刷新
+            });
             image_path = Some(args[1].clone());
-            let img = image::open(&args[1])
-                .expect("Failed to reopen image")
-                .to_rgba8();
-            let (color_image, scale) = scale_color_image(&img, &mut image_size);
-            display_scale = scale;
-            texture = Some(cc.egui_ctx.load_texture(
-                "loaded_image",
-                color_image,
-                Default::default(),
-            ));
-            original_image = Some(img);
+            image_receiver = Some(rx);
         }
 
         Self {
-            texture,
-            image_size,
+            texture: None,
+            last_image_rect: None,
+            display_scale: 1.0,
+            zoom: 1.0,
+            pan: Vec2::ZERO,
+            image_size: Vec2::ZERO,
             image_path,
-            original_image,
+            original_image: None,
+            image_receiver,
             current_tool: Tool::Rectangle,
+            color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
             current_color: Color32::WHITE,
             stroke_width: StrokeWidth::THREE,
             start_pos: None,
             operators: Vec::new(),
-            color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
-            display_scale,
-            zoom: 1.0,
-            pan: Vec2::ZERO,
-            last_image_rect: None,
         }
     }
 
@@ -259,7 +266,6 @@ impl AnnotatorApp {
 }
 
 fn scale_color_image(img: &RgbaImage, image_size: &mut Vec2) -> (ColorImage, f32) {
-    // let img = image::open(path).expect("Failed to open image").to_rgba8();
     let (w, h) = img.dimensions();
 
     let max_size = 2048u32;
@@ -293,6 +299,19 @@ fn scale_color_image(img: &RgbaImage, image_size: &mut Vec2) -> (ColorImage, f32
 
 impl App for AnnotatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 检查图片是否加载完成
+        if let Some(rx) = &self.image_receiver {
+            if let Ok((img, image_size, scale)) = rx.try_recv() {
+                let mut size = image_size;
+                let (color_image, _) = scale_color_image(&img, &mut size);
+                self.texture = Some(ctx.load_texture("loaded_image", color_image, Default::default()));
+                self.image_size = image_size;
+                self.display_scale = scale;
+                self.original_image = Some(img);
+                self.image_receiver = None; // 清掉 receiver
+            }
+        }
+
         // 处理缩放（Ctrl + 鼠标滚轮）
         let scroll = ctx.input(|i| i.raw_scroll_delta.y);
         if ctx.input(|i| i.modifiers.ctrl) && scroll != 0.0 {
@@ -348,14 +367,6 @@ impl App for AnnotatorApp {
                     Color32::WHITE,
                 );
 
-                // 绘制图片
-                painter.image(
-                    texture.id(),
-                    image_rect,
-                    Rect::from_min_max(Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                    Color32::WHITE,
-                );
-
                 // Ctrl + 左键拖动画布平移
                 if self.current_tool == Tool::Select
                     && ctx.input(|i| i.modifiers.ctrl)
@@ -391,7 +402,11 @@ impl App for AnnotatorApp {
                 // 画拖动过程
                 self.drag_event_process(&response, &painter);
             } else {
-                ui.label("请在命令行传入图片路径");
+                // 显示 loading
+                ui.centered_and_justified(|ui| {
+                    ui.spinner();
+                    ui.label("Loading image...");
+                });
             }
         });
     }
