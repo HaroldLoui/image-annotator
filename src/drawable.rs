@@ -13,8 +13,9 @@ impl Draw for Operator {
         match &self.tool {
             ToolType::Rect(rect) => draw_rect_on_image(self, img, &rect),
             ToolType::Ellipse(ellipse) => draw_ellipse_on_image(self, img, &ellipse),
-            ToolType::Arrow(arrow) => draw_arrow_on_image(self, img, &arrow.points),
+            ToolType::Arrow(arrow) => draw_points_on_image(self, img, &arrow.points, true),
             ToolType::Line(s, e) => draw_line_on_image(self, img, s, e),
+            ToolType::Pencil(points) => draw_points_on_image(self, img, points, false),
         }
     }
 }
@@ -54,7 +55,7 @@ fn draw_line_on_image(op: &Operator, img: &mut RgbaImage, start: &Pos2, end: &Po
     }
 }
 
-fn draw_arrow_on_image(op: &Operator, img: &mut RgbaImage, points: &Vec<Pos2>) {
+fn draw_points_on_image(op: &Operator, img: &mut RgbaImage, points: &Vec<Pos2>, close: bool) {
     if points.is_empty() {
         return;
     }
@@ -63,7 +64,9 @@ fn draw_arrow_on_image(op: &Operator, img: &mut RgbaImage, points: &Vec<Pos2>) {
     for p in &points[1..] {
         pb.line_to(p.x, p.y);
     }
-    pb.close();
+    if close {
+        pb.close();
+    }
 
     if let Some(path) = pb.finish() {
         draw_skia_image(op, img, &path);
@@ -87,7 +90,6 @@ fn draw_skia_image(op: &Operator, img: &mut RgbaImage, path: &Path) {
 
     if let ToolType::Arrow(ref shape) = op.tool && shape.fill != Color32::TRANSPARENT {
         let fill_color = shape.fill;
-        println!("fill_color:{:?}", fill_color);
         let mut fill_paint = Paint::default();
         fill_paint.set_color_rgba8(fill_color.r(), fill_color.g(), fill_color.b(), fill_color.a());
         fill_paint.anti_alias = true;

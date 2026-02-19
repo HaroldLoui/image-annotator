@@ -4,8 +4,7 @@ use std::sync::mpsc::{self, Receiver};
 
 use eframe::{App, egui};
 use egui::{
-    Color32, ColorImage, Painter, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Vec2,
-    epaint::{EllipseShape, PathShape, PathStroke},
+    Color32, ColorImage, Painter, PointerButton, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Ui, Vec2, epaint::{EllipseShape, PathShape, PathStroke}
 };
 
 mod color_picker;
@@ -68,6 +67,7 @@ struct AnnotatorApp {
     current_color: Color32,
     stroke_width: StrokeWidth,
     start_pos: Option<Pos2>,
+    tracks: Vec<Option<Pos2>>,
     operators: Vec<Operator>,
 }
 
@@ -111,6 +111,7 @@ impl AnnotatorApp {
             current_color: Color32::WHITE,
             stroke_width: StrokeWidth::THREE,
             start_pos: None,
+            tracks: Vec::new(),
             operators: Vec::new(),
         }
     }
@@ -163,15 +164,15 @@ impl AnnotatorApp {
 }
 
 impl AnnotatorApp {
-    fn drag_event(&mut self, response: &Response) {
+    fn drag_event(&mut self, ui: &Ui, response: &Response) {
         match self.current_tool {
             Tool::Select => {}
             Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
-                if response.drag_started() {
+                if response.drag_started_by(PointerButton::Primary) {
                     self.start_pos = response.interact_pointer_pos();
                 }
 
-                if response.drag_stopped() {
+                if response.drag_stopped_by(PointerButton::Primary) {
                     if let (Some(start), Some(end)) =
                         (self.start_pos, response.interact_pointer_pos())
                     {
@@ -181,7 +182,24 @@ impl AnnotatorApp {
                     self.start_pos = None;
                 }
             }
-            Tool::Pencil => todo!(),
+            Tool::Pencil => {
+                // FIXME: 
+                if response.drag_started_by(PointerButton::Primary) {
+                    if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
+                        self.tracks.push(Some(origin));
+                    }
+                }
+                if response.dragged_by(PointerButton::Primary) {
+                    self.tracks.push(response.interact_pointer_pos());
+                }
+                if response.drag_stopped_by(PointerButton::Primary) {
+                    self.tracks.push(response.interact_pointer_pos());
+                    if let Some(op) = self.get_operator(Pos2::ZERO, Pos2::ZERO) {
+                        self.operators.push(op);
+                    }
+                    self.tracks.clear();
+                }
+            }
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
@@ -201,7 +219,11 @@ impl AnnotatorApp {
                     op.draw(self, painter);
                 }
             }
-            Tool::Pencil => todo!(),
+            Tool::Pencil => {
+                if let Some(op) = self.get_operator(Pos2::ZERO, Pos2::ZERO) {
+                    op.draw(self, painter);
+                }
+            },
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
@@ -251,7 +273,24 @@ impl AnnotatorApp {
                 Some(Operator::new(ToolType::Arrow(ps), width, color))
             }
             Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color)),
-            Tool::Pencil => todo!(),
+            Tool::Pencil => {
+                if self.tracks.is_empty() {
+                    None
+                } else {
+                    let points: Vec<Pos2> = self.tracks
+                        .iter()
+                        .filter(|opt| opt.is_some())
+                        .map(|opt| {
+                            let p = opt.unwrap();
+                            self.screen_to_image(p, image_rect)
+                        })
+                        .collect();
+                    if points.is_empty() {
+                        return None;
+                    }
+                    Some(Operator::new(ToolType::Pencil(points), width, color))
+                }
+            },
             Tool::Number => todo!(),
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
@@ -301,9 +340,7 @@ impl App for AnnotatorApp {
                 let mut size = image_size;
                 let (color_image, _) = scale_color_image(&img, &mut size);
                 self.texture = Some(ctx.load_texture(
-                    "loaded_image", 
-                    color_image, 
-                    Default::default()
+                    "loaded_image", color_image, Default::default()
                 ));
                 self.image_size = image_size;
                 self.display_scale = scale;
@@ -393,7 +430,7 @@ impl App for AnnotatorApp {
                 }
 
                 // 根据工具进行拖拽绘制
-                self.drag_event(&response);
+                self.drag_event(ui, &response);
 
                 // 画已有标注
                 for op in &self.operators {
