@@ -4,11 +4,11 @@ use tiny_skia::{FillRule, Paint, Path, PathBuilder, PixmapMut, Stroke, Transform
 
 use crate::operators::{Operator, ToolType};
 
-pub trait Draw {
+pub trait DrawImage {
     fn draw_on_image(&self, img: &mut RgbaImage);
 }
 
-impl Draw for Operator {
+impl DrawImage for Operator {
     fn draw_on_image(&self, img: &mut RgbaImage) {
         match &self.tool {
             ToolType::Rect(rect) => draw_rect_on_image(self, img, &rect),

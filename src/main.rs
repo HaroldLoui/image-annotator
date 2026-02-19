@@ -3,20 +3,21 @@
 use std::sync::mpsc::{self, Receiver};
 
 use eframe::{App, egui};
-use egui::{
-    Color32, ColorImage, Painter, PointerButton, Pos2, Rect, Response, Sense, Stroke, TextureHandle, Ui, Vec2, epaint::{EllipseShape, PathShape, PathStroke}
-};
+use egui::{Color32, ColorImage, Pos2, Rect, Sense, TextureHandle, Vec2};
 
 mod color_picker;
 mod drawable;
 mod operators;
 mod toolbar;
+mod utils;
 
 use color_picker::ColorPickerButton;
-use drawable::Draw;
+use drawable::DrawImage;
 use image::RgbaImage;
-use operators::{Operator, ToolType};
-use toolbar::{Tool, arrow_points};
+use operators::Operator;
+use toolbar::Tool;
+
+use crate::{toolbar::ToolInfo, utils::AppHelper};
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -30,25 +31,7 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum StrokeWidth {
-    ONE,
-    THREE,
-    FIVE,
-    Custom(f32),
-}
-
-impl Into<f32> for StrokeWidth {
-    fn into(self) -> f32 {
-        match self {
-            StrokeWidth::ONE => 1f32,
-            StrokeWidth::THREE => 3f32,
-            StrokeWidth::FIVE => 5f32,
-            StrokeWidth::Custom(x) => x,
-        }
-    }
-}
-
+#[derive(Default)]
 struct AnnotatorApp {
     // 显示
     texture: Option<TextureHandle>,
@@ -62,12 +45,9 @@ struct AnnotatorApp {
     original_image: Option<RgbaImage>,
     image_receiver: Option<Receiver<(RgbaImage, Vec2, f32)>>,
     // 工具相关
-    current_tool: Tool,
     color_picker: ColorPickerButton,
-    current_color: Color32,
-    stroke_width: StrokeWidth,
-    start_pos: Option<Pos2>,
-    tracks: Vec<Option<Pos2>>,
+    current_tool_info: ToolInfo,
+    // 进行过的操作
     operators: Vec<Operator>,
 }
 
@@ -97,22 +77,13 @@ impl AnnotatorApp {
         }
 
         Self {
-            texture: None,
-            last_image_rect: None,
             display_scale: 1.0,
             zoom: 1.0,
-            pan: Vec2::ZERO,
-            image_size: Vec2::ZERO,
             image_path,
-            original_image: None,
             image_receiver,
-            current_tool: Tool::Rectangle,
-            color_picker: ColorPickerButton::new("ColorPicker", Color32::WHITE),
-            current_color: Color32::WHITE,
-            stroke_width: StrokeWidth::THREE,
-            start_pos: None,
-            tracks: Vec::new(),
-            operators: Vec::new(),
+            color_picker: ColorPickerButton::new("ColorPicker", Color32::RED),
+            current_tool_info: ToolInfo::new(Color32::RED),
+            ..Default::default()
         }
     }
 
@@ -137,15 +108,6 @@ impl AnnotatorApp {
         }
     }
 
-    fn screen_to_image(&self, pos: Pos2, image_rect: Rect) -> Pos2 {
-        (pos - image_rect.min).to_pos2() / (self.zoom * self.display_scale)
-    }
-
-    fn image_to_screen(&self, p: Pos2) -> Pos2 {
-        let image_rect_min = self.last_image_rect.map_or(Pos2::ZERO, |r| r.min);
-        image_rect_min + p.to_vec2() * self.zoom * self.display_scale
-    }
-
     fn reset_view(&mut self, available_rect: Rect) {
         if let Some(texture) = &self.texture {
             let image_size = texture.size_vec2();
@@ -159,144 +121,6 @@ impl AnnotatorApp {
             let new_size = image_size * self.zoom;
 
             self.pan = (panel_size - new_size) / 2.0;
-        }
-    }
-}
-
-impl AnnotatorApp {
-    fn drag_event(&mut self, ui: &Ui, response: &Response) {
-        match self.current_tool {
-            Tool::Select => {}
-            Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
-                if response.drag_started_by(PointerButton::Primary) {
-                    if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
-                        self.start_pos = Some(origin);
-                    }
-                }
-
-                if response.drag_stopped_by(PointerButton::Primary) {
-                    if let (Some(start), Some(end)) =
-                        (self.start_pos, response.interact_pointer_pos())
-                    {
-                        let op = self.get_operator(start, end).unwrap();
-                        self.operators.push(op);
-                    }
-                    self.start_pos = None;
-                }
-            }
-            Tool::Pencil => {
-                if response.drag_started_by(PointerButton::Primary) {
-                    if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
-                        self.tracks.push(Some(origin));
-                    }
-                }
-                if response.dragged_by(PointerButton::Primary) {
-                    self.tracks.push(response.interact_pointer_pos());
-                }
-                if response.drag_stopped_by(PointerButton::Primary) {
-                    self.tracks.push(response.interact_pointer_pos());
-                    if let Some(op) = self.get_operator(Pos2::ZERO, Pos2::ZERO) {
-                        self.operators.push(op);
-                    }
-                    self.tracks.clear();
-                }
-            }
-            Tool::Number => todo!(),
-            Tool::Emoji => todo!(),
-            Tool::Text => todo!(),
-            Tool::Masaic => todo!(),
-            Tool::Pin => todo!(),
-        }
-    }
-
-    fn drag_event_process(&self, response: &Response, painter: &Painter) {
-        match self.current_tool {
-            Tool::Select => {}
-            Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
-                if let (Some(start), Some(current)) =
-                    (self.start_pos, response.interact_pointer_pos())
-                {
-                    let op = self.get_operator(start, current).unwrap();
-                    op.draw(self, painter);
-                }
-            }
-            Tool::Pencil => {
-                if let Some(op) = self.get_operator(Pos2::ZERO, Pos2::ZERO) {
-                    op.draw(self, painter);
-                }
-            },
-            Tool::Number => todo!(),
-            Tool::Emoji => todo!(),
-            Tool::Text => todo!(),
-            Tool::Masaic => todo!(),
-            Tool::Pin => todo!(),
-        }
-    }
-
-    fn get_operator(&self, start_pos: Pos2, end_pos: Pos2) -> Option<Operator> {
-        // 获取当前 image_rect（需要存下来）
-        let image_rect_min = self.last_image_rect.map_or(Pos2::ZERO, |r| r.min);
-        let image_rect = Rect::from_min_size(image_rect_min, self.image_size * self.zoom);
-
-        // 转换为图片坐标
-        let start = self.screen_to_image(start_pos, image_rect);
-        let end = self.screen_to_image(end_pos, image_rect);
-
-        let width = self.stroke_width;
-        let color = self.current_color;
-        match self.current_tool {
-            Tool::Select => None,
-            Tool::Rectangle => {
-                let rect = Rect::from_two_pos(start, end);
-                Some(Operator::new(ToolType::Rect(rect), width, color))
-            }
-            Tool::Circle => {
-                let radius = Vec2::new(
-                    (end.x - start.x).abs() / 2.0, 
-                    (end.y - start.y).abs() / 2.0
-                );
-                let center = Pos2::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0);
-                let e = EllipseShape {
-                    center,
-                    radius,
-                    fill: Color32::TRANSPARENT,
-                    stroke: Stroke::new(width, color),
-                };
-                Some(Operator::new(ToolType::Ellipse(e), width, color))
-            }
-            Tool::Arrow => {
-                let ps = PathShape {
-                    points: arrow_points(start, end, width),
-                    closed: true,
-                    fill: color,
-                    stroke: PathStroke::new(width, color),
-                };
-                Some(Operator::new(ToolType::Arrow(ps), width, color))
-            }
-            Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color)),
-            Tool::Pencil => {
-                if self.tracks.is_empty() {
-                    None
-                } else {
-                    let points: Vec<Pos2> = self.tracks
-                        .iter()
-                        .filter(|opt| opt.is_some())
-                        .map(|opt| {
-                            let p = opt.unwrap();
-                            self.screen_to_image(p, image_rect)
-                        })
-                        .collect();
-                    if points.is_empty() {
-                        return None;
-                    }
-                    Some(Operator::new(ToolType::Pencil(points), width, color))
-                }
-            },
-            Tool::Number => todo!(),
-            Tool::Emoji => todo!(),
-            Tool::Text => todo!(),
-            Tool::Masaic => todo!(),
-            Tool::Pin => todo!(),
         }
     }
 }
@@ -340,9 +164,8 @@ impl App for AnnotatorApp {
             if let Ok((img, image_size, scale)) = rx.try_recv() {
                 let mut size = image_size;
                 let (color_image, _) = scale_color_image(&img, &mut size);
-                self.texture = Some(ctx.load_texture(
-                    "loaded_image", color_image, Default::default()
-                ));
+                self.texture =
+                    Some(ctx.load_texture("loaded_image", color_image, Default::default()));
                 self.image_size = image_size;
                 self.display_scale = scale;
                 self.original_image = Some(img);
@@ -407,15 +230,16 @@ impl App for AnnotatorApp {
                 );
 
                 // Ctrl + 左键拖动画布平移
-                if self.current_tool == Tool::Select
+                if self.current_tool_info.tool == Tool::Select
                     && ctx.input(|i| i.modifiers.ctrl)
                     && response.dragged_by(egui::PointerButton::Primary)
                 {
                     self.pan += response.drag_delta();
                 }
 
+                let helper = AppHelper::from_app(self);
                 if let Some(pos) = response.hover_pos() {
-                    let image_pos = self.screen_to_image(pos, image_rect);
+                    let image_pos = helper.screen_to_image(pos, None);
 
                     ui.ctx().debug_painter().text(
                         pos,
@@ -431,15 +255,17 @@ impl App for AnnotatorApp {
                 }
 
                 // 根据工具进行拖拽绘制
-                self.drag_event(ui, &response);
+                if let Some(op) = self.current_tool_info.drag_event(&helper, ui, &response) {
+                    self.operators.push(op);
+                }
 
                 // 画已有标注
                 for op in &self.operators {
-                    op.draw(self, &painter);
+                    op.draw(&helper, &painter);
                 }
 
                 // 画拖动过程
-                self.drag_event_process(&response, &painter);
+                self.current_tool_info.drag_event_process(&helper, &painter, &response);
             } else {
                 // 显示 loading
                 ui.centered_and_justified(|ui| {
