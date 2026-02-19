@@ -143,7 +143,7 @@ impl AnnotatorApp {
 
     fn image_to_screen(&self, p: Pos2) -> Pos2 {
         let image_rect_min = self.last_image_rect.map_or(Pos2::ZERO, |r| r.min);
-        image_rect_min + p.to_vec2() * self.zoom
+        image_rect_min + p.to_vec2() * self.zoom * self.display_scale
     }
 
     fn reset_view(&mut self, available_rect: Rect) {
