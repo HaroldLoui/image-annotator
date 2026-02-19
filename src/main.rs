@@ -169,7 +169,9 @@ impl AnnotatorApp {
             Tool::Select => {}
             Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
                 if response.drag_started_by(PointerButton::Primary) {
-                    self.start_pos = response.interact_pointer_pos();
+                    if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
+                        self.start_pos = Some(origin);
+                    }
                 }
 
                 if response.drag_stopped_by(PointerButton::Primary) {
@@ -183,7 +185,6 @@ impl AnnotatorApp {
                 }
             }
             Tool::Pencil => {
-                // FIXME: 
                 if response.drag_started_by(PointerButton::Primary) {
                     if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
                         self.tracks.push(Some(origin));
