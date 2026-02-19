@@ -1,6 +1,7 @@
 use egui::{Color32, Response, StrokeKind, Ui, Vec2};
 
 /// 颜色选择器按钮组件
+#[derive(Default)]
 pub struct ColorPickerButton {
     /// 当前选中的颜色
     current_color: Color32,
@@ -40,7 +41,7 @@ impl ColorPickerButton {
     /// - Option<Color32>: 如果用户点击了确认，返回新选择的颜色
     pub fn show(&mut self, ui: &mut Ui) -> (Response, Option<Color32>) {
         let button_response = self.draw_button(ui);
-        
+
         if button_response.clicked() {
             self.show_picker = true;
             self.just_opened = true;
@@ -51,7 +52,7 @@ impl ColorPickerButton {
 
         if self.show_picker {
             let window_id = egui::Id::new(&self.id);
-            
+
             let window_response = egui::Window::new("Color Picker")
                 .id(window_id)
                 .collapsible(false)
@@ -61,53 +62,56 @@ impl ColorPickerButton {
                     // 预设颜色
                     ui.heading("Preset Colors");
                     ui.add_space(5.0);
-                    
+
                     self.draw_preset_colors(ui);
-                    
+
                     ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(5.0);
-                    
+
                     // 自定义颜色
                     ui.horizontal(|ui| {
                         ui.heading("Custom Color");
-                        if ui.button(if self.show_custom { "▼" } else { "▶" }).clicked() {
+                        if ui
+                            .button(if self.show_custom { "▼" } else { "▶" })
+                            .clicked()
+                        {
                             self.show_custom = !self.show_custom;
                         }
                     });
-                    
+
                     if self.show_custom {
                         ui.add_space(5.0);
                         ui.color_edit_button_srgba(&mut self.temp_color);
                     }
-                    
+
                     ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(5.0);
-                    
+
                     // 预览和确认按钮
                     let mut close_window = false;
                     let mut confirm = false;
-                    
+
                     ui.horizontal(|ui| {
                         ui.label("Current:");
                         self.draw_color_preview(ui, self.temp_color);
-                        
+
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("Confirm").clicked() {
                                 confirm = true;
                                 close_window = true;
                             }
-                            
+
                             if ui.button("Cancel").clicked() {
                                 close_window = true;
                             }
                         });
                     });
-                    
+
                     (close_window, confirm)
                 });
-            
+
             // 处理窗口返回值
             if let Some(inner_response) = window_response {
                 if let Some((close_window, confirm)) = inner_response.inner {
@@ -122,7 +126,7 @@ impl ColorPickerButton {
                         }
                     }
                 }
-                
+
                 // 检测窗口是否被关闭（点击外部区域）
                 // 但忽略刚打开时的点击
                 if inner_response.response.clicked_elsewhere() && !self.just_opened {
@@ -130,7 +134,7 @@ impl ColorPickerButton {
                     self.temp_color = self.current_color;
                 }
             }
-            
+
             // 重置 just_opened 标志
             if self.just_opened {
                 self.just_opened = false;
@@ -147,35 +151,34 @@ impl ColorPickerButton {
 
         if ui.is_rect_visible(rect) {
             let visuals = ui.style().interact(&response);
-            
+
             // 绘制按钮背景
             ui.painter().rect(
                 rect,
                 3.0,
                 visuals.bg_fill,
                 visuals.bg_stroke,
-                StrokeKind::Middle
+                StrokeKind::Middle,
             );
 
             // 绘制颜色预览方块（左侧）
-            let color_rect = egui::Rect::from_min_size(
-                rect.min + egui::vec2(5.0, 5.0),
-                Vec2::new(20.0, 20.0),
-            );
-            
-            ui.painter().rect_filled(color_rect, 2.0, self.current_color);
+            let color_rect =
+                egui::Rect::from_min_size(rect.min + egui::vec2(5.0, 5.0), Vec2::new(20.0, 20.0));
+
+            ui.painter()
+                .rect_filled(color_rect, 2.0, self.current_color);
             ui.painter().rect_stroke(
                 color_rect,
                 2.0,
                 egui::Stroke::new(1.0, Color32::GRAY),
-                StrokeKind::Middle
+                StrokeKind::Middle,
             );
 
             // 绘制文本（右侧）
             // let text_pos = color_rect.right_center() + egui::vec2(8.0, 0.0);
             // let (r, g, b, _) = self.current_color.to_tuple();
             // let text = format!("RGB\n{},{},{}", r, g, b);
-            
+
             // ui.painter().text(
             //     text_pos,
             //     egui::Align2::LEFT_CENTER,
@@ -201,9 +204,9 @@ impl ColorPickerButton {
             Color32::from_rgb(128, 0, 128),   // 紫
             Color32::from_rgb(255, 192, 203), // 粉
             Color32::GRAY,
-            Color32::from_rgb(139, 69, 19),   // 棕
-            Color32::from_rgb(0, 255, 255),   // 青
-            Color32::from_rgb(255, 0, 255),   // 洋红
+            Color32::from_rgb(139, 69, 19), // 棕
+            Color32::from_rgb(0, 255, 255), // 青
+            Color32::from_rgb(255, 0, 255), // 洋红
             Color32::LIGHT_GRAY,
             Color32::DARK_GRAY,
         ];
@@ -230,7 +233,7 @@ impl ColorPickerButton {
 
         if ui.is_rect_visible(rect) {
             let inner_rect = rect.shrink(2.0);
-            
+
             // 绘制颜色方块
             ui.painter().rect_filled(inner_rect, 2.0, color);
 
@@ -244,7 +247,8 @@ impl ColorPickerButton {
                 egui::Stroke::new(1.0, Color32::GRAY)
             };
 
-            ui.painter().rect_stroke(inner_rect, 2.0, stroke, StrokeKind::Middle);
+            ui.painter()
+                .rect_stroke(inner_rect, 2.0, stroke, StrokeKind::Middle);
         }
 
         response.clicked()
@@ -256,14 +260,18 @@ impl ColorPickerButton {
         let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
 
         ui.painter().rect_filled(rect, 2.0, color);
-        ui.painter().rect_stroke(rect, 2.0, egui::Stroke::new(1.0, Color32::GRAY), StrokeKind::Middle);
+        ui.painter().rect_stroke(
+            rect,
+            2.0,
+            egui::Stroke::new(1.0, Color32::GRAY),
+            StrokeKind::Middle,
+        );
 
         let (r, g, b, _) = color.to_tuple();
         ui.label(format!("({},{},{})", r, g, b));
     }
 }
 
-// 简化的 API
 impl ColorPickerButton {
     /// 简化版本：只显示按钮，返回是否有颜色被选中
     pub fn ui(&mut self, ui: &mut Ui) -> bool {

@@ -3,7 +3,7 @@ use egui::{
     epaint::{EllipseShape, PathShape, PathStroke},
 };
 
-use crate::{AnnotatorApp, StrokeWidth};
+use crate::{toolbar::StrokeWidth, utils::AppHelper};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolType {
@@ -33,17 +33,17 @@ impl Operator {
         }
     }
 
-    pub fn draw(&self, app: &AnnotatorApp, painter: &Painter) {
+    pub fn draw(&self, helper: &AppHelper, painter: &Painter) {
         // let image_rect = app.last_image_rect.unwrap();
-        let zoom = app.zoom * app.display_scale;
+        let zoom = helper.zoom * helper.display_scale;
 
         let width = self.stroke_width;
         let color = self.color;
         match &self.tool {
             ToolType::Rect(rect) => {
                 let screen_rect = Rect::from_min_max(
-                    app.image_to_screen(rect.min),
-                    app.image_to_screen(rect.max),
+                    helper.image_to_screen(rect.min),
+                    helper.image_to_screen(rect.max),
                 );
                 painter.rect_stroke(
                     screen_rect,
@@ -53,7 +53,7 @@ impl Operator {
                 );
             }
             ToolType::Ellipse(ellipse) => {
-                let screen_center = app.image_to_screen(ellipse.center);
+                let screen_center = helper.image_to_screen(ellipse.center);
                 let screen_radius = ellipse.radius * zoom;
 
                 let screen_ellipse = EllipseShape {
@@ -69,19 +69,19 @@ impl Operator {
                 let points = arrow
                     .points
                     .iter()
-                    .map(|p| app.image_to_screen(*p))
+                    .map(|p| helper.image_to_screen(*p))
                     .collect();
                 let shape = PathShape { points, ..arrow };
                 painter.add(shape);
             }
             ToolType::Line(s, e) => {
-                let start = app.image_to_screen(*s);
-                let end = app.image_to_screen(*e);
+                let start = helper.image_to_screen(*s);
+                let end = helper.image_to_screen(*e);
                 painter.line(vec![start, end], PathStroke::new(width, color));
             }
             ToolType::Pencil(points) => {
                 let points = points.iter()
-                    .map(|p| app.image_to_screen(*p))
+                    .map(|p| helper.image_to_screen(*p))
                     .collect();
                 let shape = PathShape {
                     points,

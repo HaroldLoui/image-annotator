@@ -1,6 +1,12 @@
-use egui::{Button, Color32, Context, Frame, Image, Margin, Pos2, TopBottomPanel, Ui, Vec2};
+use egui::{
+    Button, Color32, Context, Frame, Image, Margin, Painter, PointerButton, Pos2, Rect, Response,
+    Stroke, TopBottomPanel, Ui, Vec2,
+    epaint::{EllipseShape, PathShape, PathStroke},
+};
 
-use crate::StrokeWidth;
+use crate::{
+    operators::{Operator, ToolType}, utils::AppHelper,
+};
 
 const SELECT_ICON: &[u8] = include_bytes!("../assets/select.svg");
 const RECT_ICON: &[u8] = include_bytes!("../assets/rect.svg");
@@ -20,9 +26,10 @@ const DOT_3_ICON: &[u8] = include_bytes!("../assets/dot3.svg");
 const DOT_5_ICON: &[u8] = include_bytes!("../assets/dot5.svg");
 
 /// 工具栏
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub enum Tool {
     /// 选择
+    #[default]
     Select,
     /// 框选
     Rectangle,
@@ -47,7 +54,8 @@ pub enum Tool {
 }
 
 impl Tool {
-    fn tool_info(&self) -> (&'static str, &'static [u8], &'static str) {
+    /// 工具栏图标信息
+    fn tool_icon(&self) -> (&'static str, &'static [u8], &'static str) {
         match self {
             Tool::Select => ("bytes://select_icon.svg", SELECT_ICON, "Select"),
             Tool::Rectangle => ("bytes://rect_icon.svg", RECT_ICON, "Rect"),
@@ -64,6 +72,7 @@ impl Tool {
     }
 }
 
+/// 绘制工具栏
 impl crate::AnnotatorApp {
     const BUTTON_SIZE: Vec2 = egui::vec2(36.0, 36.0);
 
@@ -104,7 +113,7 @@ impl crate::AnnotatorApp {
                             ui.separator();
 
                             if self.color_picker.ui(ui) {
-                                self.current_color = self.color_picker.color();
+                                self.current_tool_info.color = self.color_picker.color();
                             }
                             ui.separator();
 
@@ -126,16 +135,16 @@ impl crate::AnnotatorApp {
     }
 
     // 工具栏图标按钮辅助函数
-    fn toolbar_button(&mut self, ui: &mut egui::Ui, tool: Tool) {
-        let selected = self.current_tool == tool;
-        let (svg_uri, svg_data, tooltip) = tool.tool_info();
+    fn toolbar_button(&mut self, ui: &mut Ui, tool: Tool) {
+        let selected = self.current_tool_info.tool == tool;
+        let (svg_uri, svg_data, tooltip) = tool.tool_icon();
         let image = Image::from_bytes(svg_uri, svg_data);
         let button = Button::image(image)
             .fill(Color32::WHITE)
             .min_size(Self::BUTTON_SIZE)
             .frame(selected);
         if ui.add(button).on_hover_text(tooltip).clicked() {
-            self.current_tool = tool;
+            self.current_tool_info.tool = tool;
         }
     }
 
@@ -149,7 +158,7 @@ impl crate::AnnotatorApp {
         };
         let image = Image::from_bytes(data.0, data.1);
         let btn = Button::image(image)
-            .fill(if self.stroke_width == lw {
+            .fill(if self.current_tool_info.stroke_width == lw {
                 Color32::from_rgb(60, 60, 80)
             } else {
                 Color32::from_rgb(40, 40, 50)
@@ -157,7 +166,182 @@ impl crate::AnnotatorApp {
             .min_size(Self::BUTTON_SIZE);
 
         if ui.add(btn).clicked() {
-            self.stroke_width = lw;
+            self.current_tool_info.stroke_width = lw;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Copy, PartialEq)]
+pub enum StrokeWidth {
+    ONE,
+    #[default]
+    THREE,
+    FIVE,
+    Custom(f32),
+}
+
+impl Into<f32> for StrokeWidth {
+    fn into(self) -> f32 {
+        match self {
+            StrokeWidth::ONE => 1f32,
+            StrokeWidth::THREE => 3f32,
+            StrokeWidth::FIVE => 5f32,
+            StrokeWidth::Custom(x) => x,
+        }
+    }
+}
+
+/// 当前选择的工具信息及事件相关属性
+#[derive(Debug, Default, Clone)]
+pub struct ToolInfo {
+    pub tool: Tool,
+    stroke_width: StrokeWidth,
+    color: Color32,
+    start_pos: Option<Pos2>,
+    end_pos: Option<Pos2>,
+    tracks: Vec<Option<Pos2>>,
+}
+
+impl ToolInfo {
+
+    pub fn new(color: Color32) -> Self {
+        Self { color, ..Default::default() }
+    }
+
+    /// 拖动事件
+    pub fn drag_event(&mut self, helper: &AppHelper, ui: &Ui, response: &Response) -> Option<Operator> {
+        match self.tool {
+            Tool::Select => {}
+            Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
+                if response.drag_started_by(PointerButton::Primary) {
+                    if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
+                        self.start_pos = Some(origin);
+                    }
+                }
+
+                if response.drag_stopped_by(PointerButton::Primary) {
+                    self.end_pos = response.interact_pointer_pos();
+                    if self.start_pos.is_some() && self.end_pos.is_some() {
+                        let opt = self.get_operator(helper, self.end_pos);
+                        self.start_pos = None;
+                        self.end_pos = None;
+                        return opt;
+                    }
+                }
+            }
+            Tool::Pencil => {
+                if response.drag_started_by(PointerButton::Primary) {
+                    if let Some(origin) = ui.input(|i| i.pointer.press_origin()) {
+                        self.tracks.push(Some(origin));
+                    }
+                }
+                if response.dragged_by(PointerButton::Primary) {
+                    self.tracks.push(response.interact_pointer_pos());
+                }
+                if response.drag_stopped_by(PointerButton::Primary) {
+                    self.tracks.push(response.interact_pointer_pos());
+                    let opt = self.get_operator(helper, self.end_pos);
+                    self.tracks.clear();
+                    return opt;
+                }
+            }
+            Tool::Number => {},
+            Tool::Emoji => {},
+            Tool::Text => {},
+            Tool::Masaic => {},
+            Tool::Pin => {},
+        }
+        None
+    }
+
+    pub fn drag_event_process(&self, helper: &AppHelper, painter: &Painter, response: &Response)  {
+        match self.tool {
+            Tool::Select => {},
+            Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
+                if self.start_pos.is_some() {
+                    if let Some(end) = response.interact_pointer_pos() {
+                        let op = self.get_operator(helper, Some(end)).unwrap();
+                        op.draw(helper, painter);
+                    }
+                }
+            }
+            Tool::Pencil => {
+                if let Some(end) = response.interact_pointer_pos() {
+                    if let Some(op) = self.get_operator(helper, Some(end)) {
+                        op.draw(helper, painter);
+                    }
+                }
+            }
+            Tool::Number => {},
+            Tool::Emoji => {},
+            Tool::Text => {},
+            Tool::Masaic => {},
+            Tool::Pin => {},
+        }
+    }
+
+    pub fn get_operator(&self, helper: &AppHelper, end_pos: Option<Pos2>) -> Option<Operator> {
+        // 获取当前 image_rect（需要存下来）
+        let image_rect = Some(helper.get_image_rect());
+
+        // 转换为图片坐标
+        let start = helper.screen_to_image(self.start_pos.unwrap_or_default(), image_rect);
+        let end = helper.screen_to_image(end_pos.unwrap_or_default(), image_rect);
+
+        let width = self.stroke_width;
+        let color = self.color;
+        match self.tool {
+            Tool::Select => None,
+            Tool::Rectangle => {
+                let rect = Rect::from_two_pos(start, end);
+                Some(Operator::new(ToolType::Rect(rect), width, color))
+            }
+            Tool::Circle => {
+                let radius =
+                    Vec2::new((end.x - start.x).abs() / 2.0, (end.y - start.y).abs() / 2.0);
+                let center = Pos2::new((start.x + end.x) / 2.0, (start.y + end.y) / 2.0);
+                let e = EllipseShape {
+                    center,
+                    radius,
+                    fill: Color32::TRANSPARENT,
+                    stroke: Stroke::new(width, color),
+                };
+                Some(Operator::new(ToolType::Ellipse(e), width, color))
+            }
+            Tool::Arrow => {
+                let ps = PathShape {
+                    points: arrow_points(start, end, width),
+                    closed: true,
+                    fill: color,
+                    stroke: PathStroke::new(width, color),
+                };
+                Some(Operator::new(ToolType::Arrow(ps), width, color))
+            }
+            Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color)),
+            Tool::Pencil => {
+                if self.tracks.is_empty() {
+                    None
+                } else {
+                    let points: Vec<Pos2> = self
+                        .tracks
+                        .iter()
+                        .filter(|opt| opt.is_some())
+                        .map(|opt| {
+                            let p = opt.unwrap();
+                            helper.screen_to_image(p, image_rect)
+                        })
+                        .collect();
+                    if points.is_empty() {
+                        return None;
+                    }
+                    Some(Operator::new(ToolType::Pencil(points), width, color))
+                }
+            }
+            Tool::Number => todo!(),
+            Tool::Emoji => todo!(),
+            Tool::Text => todo!(),
+            Tool::Masaic => todo!(),
+            Tool::Pin => todo!(),
         }
     }
 }
