@@ -30,6 +30,6 @@ impl AppHelper {
     }
 
     pub fn image_to_screen(&self, pos: Pos2) -> Pos2 {
-        self.image_rect_min + pos.to_vec2() * self.zoom
+        self.image_rect_min + pos.to_vec2() * self.zoom * self.display_scale
     }
 }
