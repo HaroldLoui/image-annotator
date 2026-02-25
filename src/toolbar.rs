@@ -1,7 +1,7 @@
 use egui::{
     Button, Color32, Context, Frame, Image, Margin, Painter, PointerButton, Pos2, Rect, Response,
     Stroke, TopBottomPanel, Ui, Vec2,
-    epaint::{EllipseShape, PathShape, PathStroke},
+    epaint::{CircleShape, EllipseShape, PathShape, PathStroke},
 };
 
 use crate::{
@@ -171,6 +171,7 @@ impl crate::AnnotatorApp {
     }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Default, Copy, PartialEq)]
 pub enum StrokeWidth {
     ONE,
@@ -200,6 +201,7 @@ pub struct ToolInfo {
     start_pos: Option<Pos2>,
     end_pos: Option<Pos2>,
     tracks: Vec<Option<Pos2>>,
+    pub number: u8,
 }
 
 impl ToolInfo {
@@ -245,7 +247,17 @@ impl ToolInfo {
                     return opt;
                 }
             }
-            Tool::Number => {},
+            Tool::Number => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(point) = response.interact_pointer_pos() {
+                        self.start_pos = Some(point);
+                        let opt = self.get_operator(helper, None);
+                        self.start_pos = None;
+                        self.number += 1;
+                        return opt;
+                    }
+                }
+            },
             Tool::Emoji => {},
             Tool::Text => {},
             Tool::Masaic => {},
@@ -272,7 +284,13 @@ impl ToolInfo {
                     }
                 }
             }
-            Tool::Number => {},
+            Tool::Number => {
+                if self.start_pos.is_some() {
+                    if let Some(op) = self.get_operator(helper, None) {
+                        op.draw(helper, painter);
+                    }
+                }
+            },
             Tool::Emoji => {},
             Tool::Text => {},
             Tool::Masaic => {},
@@ -337,7 +355,15 @@ impl ToolInfo {
                     Some(Operator::new(ToolType::Pencil(points), width, color))
                 }
             }
-            Tool::Number => todo!(),
+            Tool::Number => {
+                let shape = CircleShape {
+                    center: start,
+                    radius: 10.0,
+                    fill: color,
+                    stroke: Stroke::new(1.0, Color32::BLACK),
+                };
+                Some(Operator::new(ToolType::Number(shape, self.number), width, color))
+            }
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
             Tool::Masaic => todo!(),

@@ -1,6 +1,7 @@
 use egui::{Color32, Pos2, Rect, epaint::EllipseShape};
 use image::RgbaImage;
 use tiny_skia::{FillRule, Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
+use tiny_skia::Rect as SkiaRect;
 
 use crate::operators::{Operator, ToolType};
 
@@ -16,13 +17,13 @@ impl DrawImage for Operator {
             ToolType::Arrow(arrow) => draw_points_on_image(self, img, &arrow.points, true),
             ToolType::Line(s, e) => draw_line_on_image(self, img, s, e),
             ToolType::Pencil(points) => draw_points_on_image(self, img, points, false),
+            ToolType::Number(_, _) => {},
         }
     }
 }
 
 fn draw_rect_on_image(op: &Operator, img: &mut RgbaImage, rect: &Rect) {
-    let skia_rect =
-        tiny_skia::Rect::from_xywh(rect.left(), rect.top(), rect.width(), rect.height()).unwrap();
+    let skia_rect = SkiaRect::from_xywh(rect.left(), rect.top(), rect.width(), rect.height()).unwrap();
 
     let path = PathBuilder::from_rect(skia_rect);
 
@@ -30,7 +31,7 @@ fn draw_rect_on_image(op: &Operator, img: &mut RgbaImage, rect: &Rect) {
 }
 
 fn draw_ellipse_on_image(op: &Operator, img: &mut RgbaImage, ellipse: &EllipseShape) {
-    let rect = tiny_skia::Rect::from_xywh(
+    let rect = SkiaRect::from_xywh(
         ellipse.center.x - ellipse.radius.x,
         ellipse.center.y - ellipse.radius.y,
         ellipse.radius.x * 2.0,

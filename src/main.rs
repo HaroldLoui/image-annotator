@@ -17,7 +17,7 @@ use image::RgbaImage;
 use operators::Operator;
 use toolbar::Tool;
 
-use crate::{toolbar::ToolInfo, utils::AppHelper};
+use crate::{operators::ToolType, toolbar::ToolInfo, utils::AppHelper};
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
@@ -68,9 +68,9 @@ impl AnnotatorApp {
                     .expect("Failed to reopen image")
                     .to_rgba8();
                 let mut image_size = Vec2::ZERO;
-                let (_, scale) = scale_color_image(&img, &mut image_size); // 复用现有逻辑
+                let (_, scale) = scale_color_image(&img, &mut image_size);
                 tx.send((img, image_size, scale)).unwrap();
-                ctx.request_repaint(); // 通知 UI 刷新
+                ctx.request_repaint();
             });
             image_path = Some(args[1].clone());
             image_receiver = Some(rx);
@@ -164,12 +164,13 @@ impl App for AnnotatorApp {
             if let Ok((img, image_size, scale)) = rx.try_recv() {
                 let mut size = image_size;
                 let (color_image, _) = scale_color_image(&img, &mut size);
+                // ColorImage::from_rgba_unmultiplied([10, 20], color_image.as_raw());
                 self.texture =
                     Some(ctx.load_texture("loaded_image", color_image, Default::default()));
                 self.image_size = image_size;
                 self.display_scale = scale;
                 self.original_image = Some(img);
-                self.image_receiver = None; // 清掉 receiver
+                self.image_receiver = None;
             }
         }
 
@@ -198,7 +199,10 @@ impl App for AnnotatorApp {
 
         // 撤销
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z)) {
-            self.operators.pop();
+            let opt = self.operators.pop();
+            if opt.is_some_and(|op| matches!(op.tool, ToolType::Number(..))) {
+                self.current_tool_info.number -= 1;
+            }
         }
 
         // 保存

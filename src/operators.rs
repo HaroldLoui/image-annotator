@@ -1,6 +1,5 @@
 use egui::{
-    Color32, Painter, Pos2, Rect, Stroke, StrokeKind,
-    epaint::{EllipseShape, PathShape, PathStroke},
+    Align2, Color32, FontId, Painter, Pos2, Rect, Stroke, StrokeKind, epaint::{CircleShape, EllipseShape, PathShape, PathStroke}
 };
 
 use crate::{toolbar::StrokeWidth, utils::AppHelper};
@@ -12,6 +11,7 @@ pub enum ToolType {
     Arrow(PathShape),
     Line(Pos2, Pos2),
     Pencil(Vec<Pos2>),
+    Number(CircleShape, u8),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -91,6 +91,11 @@ impl Operator {
                 };
                 painter.add(shape);
             }
+            ToolType::Number(c, n) => {
+                let center = helper.image_to_screen(c.center);
+                painter.circle(center, c.radius, c.fill, c.stroke);
+                painter.text(center, Align2::CENTER_CENTER, n + 1, FontId::proportional(c.radius), Color32::WHITE);
+            },
         }
     }
 }
