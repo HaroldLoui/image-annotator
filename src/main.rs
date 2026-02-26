@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::{self, Receiver};
 
-use eframe::{App, egui};
+use eframe::{App, egui, wgpu};
 use egui::{Color32, ColorImage, Pos2, Rect, Sense, TextureHandle, Vec2};
 
 mod color_picker;
@@ -20,7 +20,27 @@ use toolbar::Tool;
 use crate::{operators::ToolType, toolbar::ToolInfo, utils::AppHelper};
 
 fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default(),
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            wgpu_setup: eframe::egui_wgpu::WgpuSetup::CreateNew(
+                eframe::egui_wgpu::WgpuSetupCreateNew {
+                    device_descriptor: std::sync::Arc::new(|_adapter| {
+                        wgpu::DeviceDescriptor {
+                            required_limits: wgpu::Limits {
+                                max_texture_dimension_2d: 8192, // 调大
+                                ..wgpu::Limits::default()
+                            },
+                            ..Default::default()
+                        }
+                    }),
+                    ..Default::default()
+                },
+            ),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
     eframe::run_native(
         "Annotator",
         options,
@@ -36,14 +56,12 @@ struct AnnotatorApp {
     // 显示
     texture: Option<TextureHandle>,
     last_image_rect: Option<Rect>,
-    display_scale: f32,
     zoom: f32,
     pan: Vec2,
     // 图片相关
     image_size: Vec2,
-    image_path: Option<String>,
     original_image: Option<RgbaImage>,
-    image_receiver: Option<Receiver<(RgbaImage, Vec2, f32)>>,
+    image_receiver: Option<Receiver<(RgbaImage, Vec2)>>,
     // 工具相关
     color_picker: ColorPickerButton,
     current_tool_info: ToolInfo,
@@ -55,7 +73,6 @@ impl AnnotatorApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // 从命令行读取图片路径
         let args: Vec<String> = std::env::args().collect();
-        let mut image_path = None;
         let mut image_receiver = None;
 
         if args.len() > 1 {
@@ -67,19 +84,16 @@ impl AnnotatorApp {
                 let img = image::open(&path)
                     .expect("Failed to reopen image")
                     .to_rgba8();
-                let mut image_size = Vec2::ZERO;
-                let (_, scale) = scale_color_image(&img, &mut image_size);
-                tx.send((img, image_size, scale)).unwrap();
+                let dim = img.dimensions();
+                let image_size = Vec2::new(dim.0 as f32, dim.1 as f32);
+                tx.send((img, image_size)).unwrap();
                 ctx.request_repaint();
             });
-            image_path = Some(args[1].clone());
             image_receiver = Some(rx);
         }
 
         Self {
-            display_scale: 1.0,
             zoom: 1.0,
-            image_path,
             image_receiver,
             color_picker: ColorPickerButton::new("ColorPicker", Color32::RED),
             current_tool_info: ToolInfo::new(Color32::RED),
@@ -88,14 +102,14 @@ impl AnnotatorApp {
     }
 
     fn save_image(&self, ctx: &egui::Context) {
-        if let (Some(path), Some(img)) = (&self.image_path, &self.original_image) {
+        if let Some(img) = &self.original_image {
             let mut img = img.clone();
 
             for op in &self.operators {
                 op.draw_on_image(&mut img);
             }
 
-            img.save(path).expect("Failed to save image");
+            img.save_with_format("output.png", image::ImageFormat::Png).expect("Failed to save image");
             println!("image saved!");
 
             // let _ = std::process::Command::new("wl-copy")
@@ -125,7 +139,7 @@ impl AnnotatorApp {
     }
 }
 
-fn scale_color_image(img: &RgbaImage, image_size: &mut Vec2) -> (ColorImage, f32) {
+fn _scale_color_image(img: &RgbaImage, image_size: &mut Vec2) -> (ColorImage, f32) {
     let (w, h) = img.dimensions();
 
     let max_size = 2048u32;
@@ -161,14 +175,13 @@ impl App for AnnotatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 检查图片是否加载完成
         if let Some(rx) = &self.image_receiver {
-            if let Ok((img, image_size, scale)) = rx.try_recv() {
-                let mut size = image_size;
-                let (color_image, _) = scale_color_image(&img, &mut size);
-                // ColorImage::from_rgba_unmultiplied([10, 20], color_image.as_raw());
-                self.texture =
-                    Some(ctx.load_texture("loaded_image", color_image, Default::default()));
+            if let Ok((img, image_size)) = rx.try_recv() {
+                let color_image = ColorImage::from_rgba_unmultiplied(
+                    [image_size.x as usize, image_size.y as usize], 
+                    &img.as_raw()
+                );
+                self.texture = Some(ctx.load_texture("loaded_image", color_image, Default::default()));
                 self.image_size = image_size;
-                self.display_scale = scale;
                 self.original_image = Some(img);
                 self.image_receiver = None;
             }

@@ -38,7 +38,7 @@ impl Operator {
 
     pub fn draw(&self, helper: &AppHelper, painter: &Painter) {
         // let image_rect = app.last_image_rect.unwrap();
-        let zoom = helper.zoom * helper.display_scale;
+        let zoom = helper.zoom;
 
         let width = self.stroke_width;
         let color = self.color;

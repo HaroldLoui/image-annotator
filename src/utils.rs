@@ -7,7 +7,6 @@ pub struct AppHelper {
     pub image_rect_min: Pos2,
     pub image_size: Vec2,
     pub zoom: f32,
-    pub display_scale: f32,
 }
 
 impl AppHelper {
@@ -16,7 +15,6 @@ impl AppHelper {
             image_rect_min: app.last_image_rect.map_or(Pos2::default(), |r| r.min),
             image_size: app.image_size,
             zoom: app.zoom,
-            display_scale: app.display_scale,
         }
     }
 
@@ -26,10 +24,10 @@ impl AppHelper {
 
     pub fn screen_to_image(&self, pos: Pos2, image_rect: Option<Rect>) -> Pos2 {
         let image_rect_min = image_rect.map_or(self.image_rect_min, |r| r.min);
-        (pos - image_rect_min).to_pos2() / (self.zoom * self.display_scale)
+        (pos - image_rect_min).to_pos2() / self.zoom
     }
 
     pub fn image_to_screen(&self, pos: Pos2) -> Pos2 {
-        self.image_rect_min + pos.to_vec2() * self.zoom * self.display_scale
+        self.image_rect_min + pos.to_vec2() * self.zoom
     }
 }
