@@ -312,7 +312,7 @@ impl ToolInfo {
             Tool::Select => None,
             Tool::Rectangle => {
                 let rect = Rect::from_two_pos(start, end);
-                Some(Operator::new(ToolType::Rect(rect), width, color))
+                Some(Operator::new(ToolType::Rect(rect), width, color, None))
             }
             Tool::Circle => {
                 let radius =
@@ -324,7 +324,7 @@ impl ToolInfo {
                     fill: Color32::TRANSPARENT,
                     stroke: Stroke::new(width, color),
                 };
-                Some(Operator::new(ToolType::Ellipse(e), width, color))
+                Some(Operator::new(ToolType::Ellipse(e), width, color, None))
             }
             Tool::Arrow => {
                 let ps = PathShape {
@@ -333,9 +333,9 @@ impl ToolInfo {
                     fill: color,
                     stroke: PathStroke::new(width, color),
                 };
-                Some(Operator::new(ToolType::Arrow(ps), width, color))
+                Some(Operator::new(ToolType::Arrow(ps), width, color, Some(color)))
             }
-            Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color)),
+            Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color, None)),
             Tool::Pencil => {
                 if self.tracks.is_empty() {
                     None
@@ -352,7 +352,7 @@ impl ToolInfo {
                     if points.is_empty() {
                         return None;
                     }
-                    Some(Operator::new(ToolType::Pencil(points), width, color))
+                    Some(Operator::new(ToolType::Pencil(points), width, color, None))
                 }
             }
             Tool::Number => {
@@ -362,7 +362,7 @@ impl ToolInfo {
                     fill: color,
                     stroke: Stroke::new(1.0, Color32::BLACK),
                 };
-                Some(Operator::new(ToolType::Number(shape, self.number), width, color))
+                Some(Operator::new(ToolType::Number(shape, self.number), width, color, Some(color)))
             }
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),

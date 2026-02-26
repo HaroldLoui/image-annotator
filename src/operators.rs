@@ -22,14 +22,17 @@ pub struct Operator {
     pub stroke_width: StrokeWidth,
     /// 当前操作时的颜色
     pub color: Color32,
+    /// 填充颜色
+    pub fill_color: Option<Color32>,
 }
 
 impl Operator {
-    pub fn new(tool: ToolType, stroke_width: StrokeWidth, color: Color32) -> Self {
+    pub fn new(tool: ToolType, stroke_width: StrokeWidth, color: Color32, fill_color: Option<Color32>) -> Self {
         Operator {
             tool,
             stroke_width,
             color,
+            fill_color,
         }
     }
 
