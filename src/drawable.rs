@@ -1,4 +1,4 @@
-use ab_glyph::{Font, FontRef, PxScale, ScaleFont};
+use ab_glyph::{Font, PxScale};
 use egui::Vec2;
 use egui::{Pos2, Rect, epaint::EllipseShape};
 use image::RgbaImage;
@@ -9,11 +9,11 @@ use tiny_skia::Rect as SkiaRect;
 use crate::operators::{Operator, ToolType};
 
 pub trait DrawImage {
-    fn draw_on_image(&self, img: &mut RgbaImage);
+    fn draw_on_image<F: Font>(&self, img: &mut RgbaImage, font: &F);
 }
 
 impl DrawImage for Operator {
-    fn draw_on_image(&self, img: &mut RgbaImage) {
+    fn draw_on_image<F: Font>(&self, img: &mut RgbaImage, font: &F) {
         match &self.tool {
             ToolType::Rect(rect) => draw_rect_on_image(self, img, &rect),
             ToolType::Ellipse(ellipse) => draw_ellipse_on_image(self, img, &ellipse),
@@ -28,7 +28,7 @@ impl DrawImage for Operator {
                     stroke: c.stroke,
                 };
                 draw_ellipse_on_image(self, img, &ellipse);
-                draw_text(img, c.center.into(), &n.to_string(), c.radius);
+                draw_text(img, c.center, &n.to_string(), c.radius, font, true);
             },
         }
     }
@@ -57,8 +57,6 @@ fn draw_ellipse_on_image(op: &Operator, img: &mut RgbaImage, ellipse: &EllipseSh
 }
 
 fn draw_line_on_image(op: &Operator, img: &mut RgbaImage, start: &Pos2, end: &Pos2) {
-    // stroke.line_cap = LineCap::Square;
-
     let mut pb = PathBuilder::new();
     pb.move_to(start.x, start.y);
     pb.line_to(end.x, end.y);
@@ -110,26 +108,19 @@ fn draw_skia_image(op: &Operator, img: &mut RgbaImage, path: &Path) {
 
 }
 
-fn draw_text(img: &mut RgbaImage, pos: (f32, f32), text: &str, size: f32) {
-
-    let font_path = "C:/Windows/Fonts/HarmonyOS_Sans_SC_Regular.ttf";
-    let data = std::fs::read(font_path).unwrap();
-    let font = FontRef::try_from_slice(&data).unwrap();
+fn draw_text<F: Font>(img: &mut RgbaImage, pos: Pos2, text: &str, size: f32, font: &F, center: bool) {
     let scale = PxScale::from(size);
     let color = image::Rgba([255, 255, 255, 255]);
     
-    let (tw, th) = measure_text(&font, scale, &text);
-    let text_x = pos.0 - tw / 2.0;
-    let text_y = pos.1 - th / 2.0;
+    let (text_x, text_y) = if center {
+        // 计算居中位置
+        let (tw, th) = crate::font::measure_text(&font, scale, &text);
+        let text_x = pos.x - tw / 2.0;
+        let text_y = pos.y - th / 2.0;
+        (text_x as i32, text_y as i32)
+    } else {
+        (pos.x as i32, pos.y as i32)
+    };
 
-    draw_text_mut(img, color, text_x as i32, text_y as i32, scale, &font, text);
-}
-
-fn measure_text(font: &FontRef, scale: PxScale, text: &str) -> (f32, f32) {
-    let scaled = font.as_scaled(scale);
-    let width: f32 = text.chars()
-        .map(|c| scaled.h_advance(font.glyph_id(c)))
-        .sum();
-    let height = scaled.ascent() - scaled.descent();
-    (width, height)
+    draw_text_mut(img, color, text_x, text_y, scale, &font, text);
 }

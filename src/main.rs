@@ -2,11 +2,13 @@
 
 use std::sync::mpsc::{self, Receiver};
 
+use ab_glyph::FontRef;
 use eframe::{App, egui, wgpu};
 use egui::{Color32, ColorImage, Pos2, Rect, Sense, TextureHandle, Vec2};
 
 mod color_picker;
 mod drawable;
+mod font;
 mod operators;
 mod toolbar;
 mod utils;
@@ -14,10 +16,9 @@ mod utils;
 use color_picker::ColorPickerButton;
 use drawable::DrawImage;
 use image::RgbaImage;
-use operators::Operator;
-use toolbar::Tool;
-
-use crate::{operators::ToolType, toolbar::ToolInfo, utils::AppHelper};
+use operators::{Operator, ToolType};
+use toolbar::{Tool, ToolInfo};
+use utils::AppHelper;
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
@@ -58,6 +59,7 @@ struct AnnotatorApp {
     last_image_rect: Option<Rect>,
     zoom: f32,
     pan: Vec2,
+    font_data: Option<&'static [u8]>,
     // 图片相关
     image_size: Vec2,
     original_image: Option<RgbaImage>,
@@ -92,11 +94,17 @@ impl AnnotatorApp {
             image_receiver = Some(rx);
         }
 
+        let mut font_data = None;
+        if let Some((data, name)) = font::try_load_font_data_from_system() {
+            font::init_egui_fonts(cc, Some((data, name)));
+            font_data = Some(data);
+        }
         Self {
             zoom: 1.0,
             image_receiver,
             color_picker: ColorPickerButton::new("ColorPicker", Color32::RED),
             current_tool_info: ToolInfo::new(Color32::RED),
+            font_data,
             ..Default::default()
         }
     }
@@ -105,8 +113,10 @@ impl AnnotatorApp {
         if let Some(img) = &self.original_image {
             let mut img = img.clone();
 
+            let font_data = self.font_data.unwrap();
+            let font = FontRef::try_from_slice(font_data).expect("Failed to load system font");
             for op in &self.operators {
-                op.draw_on_image(&mut img);
+                op.draw_on_image(&mut img, &font);
             }
 
             img.save_with_format("output.png", image::ImageFormat::Png).expect("Failed to save image");
