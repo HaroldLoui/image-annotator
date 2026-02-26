@@ -1,3 +1,5 @@
+use std::ops::Mul;
+
 use egui::{
     Button, Color32, Context, Frame, Image, Margin, Painter, PointerButton, Pos2, Rect, Response,
     Stroke, TopBottomPanel, Ui, Vec2,
@@ -192,6 +194,15 @@ impl Into<f32> for StrokeWidth {
     }
 }
 
+impl Mul<f32> for StrokeWidth {
+    type Output = f32;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        let base: f32 = self.into();
+        base * rhs
+    }
+}
+
 /// 当前选择的工具信息及事件相关属性
 #[derive(Debug, Default, Clone)]
 pub struct ToolInfo {
@@ -356,9 +367,10 @@ impl ToolInfo {
                 }
             }
             Tool::Number => {
+                let radius = 10.0 + width * 5.0;
                 let shape = CircleShape {
                     center: start,
-                    radius: 10.0,
+                    radius,
                     fill: color,
                     stroke: Stroke::new(1.0, Color32::BLACK),
                 };

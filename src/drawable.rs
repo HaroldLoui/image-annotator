@@ -28,7 +28,7 @@ impl DrawImage for Operator {
                     stroke: c.stroke,
                 };
                 draw_ellipse_on_image(self, img, &ellipse);
-                draw_text(img, c.center.into(), &n.to_string());
+                draw_text(img, c.center.into(), &n.to_string(), c.radius);
             },
         }
     }
@@ -110,12 +110,12 @@ fn draw_skia_image(op: &Operator, img: &mut RgbaImage, path: &Path) {
 
 }
 
-fn draw_text(img: &mut RgbaImage, pos: (f32, f32), text: &str) {
+fn draw_text(img: &mut RgbaImage, pos: (f32, f32), text: &str, size: f32) {
 
     let font_path = "C:/Windows/Fonts/HarmonyOS_Sans_SC_Regular.ttf";
     let data = std::fs::read(font_path).unwrap();
     let font = FontRef::try_from_slice(&data).unwrap();
-    let scale = PxScale::from(50.0);
+    let scale = PxScale::from(size);
     let color = image::Rgba([255, 255, 255, 255]);
     
     let (tw, th) = measure_text(&font, scale, &text);

@@ -96,8 +96,9 @@ impl Operator {
             }
             ToolType::Number(c, n) => {
                 let center = helper.image_to_screen(c.center);
-                painter.circle(center, c.radius, c.fill, c.stroke);
-                painter.text(center, Align2::CENTER_CENTER, n + 1, FontId::proportional(c.radius), Color32::WHITE);
+                let radius = c.radius * zoom;
+                painter.circle(center, radius, c.fill, c.stroke);
+                painter.text(center, Align2::CENTER_CENTER, n + 1, FontId::proportional(radius), Color32::WHITE);
             },
         }
     }
