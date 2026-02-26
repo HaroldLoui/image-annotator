@@ -142,7 +142,7 @@ impl crate::AnnotatorApp {
         let (svg_uri, svg_data, tooltip) = tool.tool_icon();
         let image = Image::from_bytes(svg_uri, svg_data);
         let button = Button::image(image)
-            .fill(Color32::WHITE)
+            .fill(Color32::LIGHT_GRAY)
             .min_size(Self::BUTTON_SIZE)
             .frame(selected);
         if ui.add(button).on_hover_text(tooltip).clicked() {
@@ -159,13 +159,11 @@ impl crate::AnnotatorApp {
             StrokeWidth::Custom(_) => unreachable!(),
         };
         let image = Image::from_bytes(data.0, data.1);
+        let selected = self.current_tool_info.stroke_width == lw;
         let btn = Button::image(image)
-            .fill(if self.current_tool_info.stroke_width == lw {
-                Color32::from_rgb(60, 60, 80)
-            } else {
-                Color32::from_rgb(40, 40, 50)
-            })
-            .min_size(Self::BUTTON_SIZE);
+            .fill(Color32::LIGHT_GRAY)
+            .min_size(Self::BUTTON_SIZE)
+            .frame(selected);
 
         if ui.add(btn).clicked() {
             self.current_tool_info.stroke_width = lw;
@@ -200,6 +198,15 @@ impl Mul<f32> for StrokeWidth {
     fn mul(self, rhs: f32) -> Self::Output {
         let base: f32 = self.into();
         base * rhs
+    }
+}
+
+impl Mul<StrokeWidth> for f32 {
+    type Output = f32;
+
+    fn mul(self, rhs: StrokeWidth) -> Self::Output {
+        let base: f32 = rhs.into();
+        self * base
     }
 }
 

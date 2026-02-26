@@ -139,38 +139,6 @@ impl AnnotatorApp {
     }
 }
 
-fn _scale_color_image(img: &RgbaImage, image_size: &mut Vec2) -> (ColorImage, f32) {
-    let (w, h) = img.dimensions();
-
-    let max_size = 2048u32;
-
-    let scale = if w > max_size || h > max_size {
-        let scale_w = max_size as f32 / w as f32;
-        let scale_h = max_size as f32 / h as f32;
-        scale_w.min(scale_h)
-    } else {
-        1.0
-    };
-
-    let display_img = if scale < 1.0 {
-        image::imageops::resize(
-            img,
-            (w as f32 * scale) as u32,
-            (h as f32 * scale) as u32,
-            image::imageops::FilterType::Lanczos3,
-        )
-    } else {
-        img.clone()
-    };
-
-    let size = display_img.dimensions();
-    *image_size = egui::vec2(size.0 as f32, size.1 as f32);
-
-    let rgba = display_img.into_raw();
-    let color_image = ColorImage::from_rgba_unmultiplied([size.0 as usize, size.1 as usize], &rgba);
-    (color_image, scale)
-}
-
 impl App for AnnotatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 检查图片是否加载完成
