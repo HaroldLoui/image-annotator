@@ -7,7 +7,8 @@ use egui::{
 };
 
 use crate::{
-    operators::{Operator, ToolType}, utils::AppHelper,
+    operators::{Operator, ToolType},
+    utils::AppHelper,
 };
 
 const SELECT_ICON: &[u8] = include_bytes!("../assets/select.svg");
@@ -21,7 +22,8 @@ const EMOJI_ICON: &[u8] = include_bytes!("../assets/emoji.svg");
 const TEXT_ICON: &[u8] = include_bytes!("../assets/text.svg");
 const MOSAIC_ICON: &[u8] = include_bytes!("../assets/mosaic.svg");
 const PIN_ICON: &[u8] = include_bytes!("../assets/pin.svg");
-// const LINE_WIDTH_ICON: &[u8] = include_bytes!("../assets/lineWidth.svg");
+const COPY_ICON: &[u8] = include_bytes!("../assets/copy.svg");
+const SAVE_ICON: &[u8] = include_bytes!("../assets/save.svg");
 
 const DOT_1_ICON: &[u8] = include_bytes!("../assets/dot1.svg");
 const DOT_3_ICON: &[u8] = include_bytes!("../assets/dot3.svg");
@@ -51,8 +53,12 @@ pub enum Tool {
     Text,
     /// 马赛克
     Masaic,
-    /// 铆钉
+    /// Pin
     Pin,
+    /// 复制到剪贴板
+    Copy,
+    /// 保存到本地
+    Save,
 }
 
 impl Tool {
@@ -70,6 +76,8 @@ impl Tool {
             Tool::Text => ("bytes://text_icon.svg", TEXT_ICON, "Text"),
             Tool::Masaic => ("bytes://mosaic_icon.svg", MOSAIC_ICON, "Mosaic"),
             Tool::Pin => ("bytes://pin_icon.svg", PIN_ICON, "Pin"),
+            Tool::Copy => ("bytes://copy_icon.svg", COPY_ICON, "Copy to Clipboard"),
+            Tool::Save => ("bytes://save_icon.svg", SAVE_ICON, "Save"),
         }
     }
 }
@@ -98,39 +106,29 @@ impl crate::AnnotatorApp {
                                     self.toolbar_button(ui, Tool::Circle);
                                     self.toolbar_button(ui, Tool::Arrow);
                                     self.toolbar_button(ui, Tool::Line);
-                                });
-                                ui.horizontal(|ui| {
                                     self.toolbar_button(ui, Tool::Pencil);
                                     self.toolbar_button(ui, Tool::Number);
                                     self.toolbar_button(ui, Tool::Emoji);
                                     self.toolbar_button(ui, Tool::Text);
                                     self.toolbar_button(ui, Tool::Masaic);
+
+                                    ui.separator();
+
+                                    self.toolbar_button(ui, Tool::Pin);
+                                    self.toolbar_button(ui, Tool::Copy);
+                                    self.toolbar_button(ui, Tool::Save);
+                                });
+                                ui.separator();
+                                ui.horizontal_centered(|ui| {
+                                    self.line_width_button(ui, StrokeWidth::ONE);
+                                    self.line_width_button(ui, StrokeWidth::THREE);
+                                    self.line_width_button(ui, StrokeWidth::FIVE);
+                                    ui.separator();
+                                    if self.color_picker.ui(ui) {
+                                        self.current_tool_info.color = self.color_picker.color();
+                                    }
                                 });
                             });
-                            ui.separator();
-
-                            self.line_width_button(ui, StrokeWidth::ONE);
-                            self.line_width_button(ui, StrokeWidth::THREE);
-                            self.line_width_button(ui, StrokeWidth::FIVE);
-                            ui.separator();
-
-                            if self.color_picker.ui(ui) {
-                                self.current_tool_info.color = self.color_picker.color();
-                            }
-                            ui.separator();
-
-                            self.toolbar_button(ui, Tool::Pin);
-                            self.toolbar_button(ui, Tool::Text);
-                            self.toolbar_button(ui, Tool::Masaic);
-
-                            // 右侧：设置和操作按钮
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui.button("⚙").clicked() {}
-                                    if ui.button("❓").clicked() {}
-                                },
-                            );
                         });
                     });
             });
@@ -223,7 +221,6 @@ pub struct ToolInfo {
 }
 
 impl ToolInfo {
-
     pub fn new(color: Color32) -> Self {
         Self { color, ..Default::default() }
     }
@@ -275,18 +272,20 @@ impl ToolInfo {
                         return opt;
                     }
                 }
-            },
-            Tool::Emoji => {},
-            Tool::Text => {},
-            Tool::Masaic => {},
-            Tool::Pin => {},
+            }
+            Tool::Emoji => {}
+            Tool::Text => {}
+            Tool::Masaic => {}
+            Tool::Pin => {}
+            Tool::Copy => {},
+            Tool::Save => {},
         }
         None
     }
 
-    pub fn drag_event_process(&self, helper: &AppHelper, painter: &Painter, response: &Response)  {
+    pub fn drag_event_process(&self, helper: &AppHelper, painter: &Painter, response: &Response) {
         match self.tool {
-            Tool::Select => {},
+            Tool::Select => {}
             Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
                 if self.start_pos.is_some() {
                     if let Some(end) = response.interact_pointer_pos() {
@@ -308,11 +307,13 @@ impl ToolInfo {
                         op.draw(helper, painter);
                     }
                 }
-            },
-            Tool::Emoji => {},
-            Tool::Text => {},
-            Tool::Masaic => {},
-            Tool::Pin => {},
+            }
+            Tool::Emoji => {}
+            Tool::Text => {}
+            Tool::Masaic => {}
+            Tool::Pin => {}
+            Tool::Copy => {}
+            Tool::Save => {}
         }
     }
 
@@ -351,9 +352,19 @@ impl ToolInfo {
                     fill: color,
                     stroke: PathStroke::new(width, color),
                 };
-                Some(Operator::new(ToolType::Arrow(ps), width, color, Some(color)))
+                Some(Operator::new(
+                    ToolType::Arrow(ps),
+                    width,
+                    color,
+                    Some(color),
+                ))
             }
-            Tool::Line => Some(Operator::new(ToolType::Line(start, end), width, color, None)),
+            Tool::Line => Some(Operator::new(
+                ToolType::Line(start, end),
+                width,
+                color,
+                None,
+            )),
             Tool::Pencil => {
                 if self.tracks.is_empty() {
                     None
@@ -381,12 +392,19 @@ impl ToolInfo {
                     fill: color,
                     stroke: Stroke::new(1.0, Color32::BLACK),
                 };
-                Some(Operator::new(ToolType::Number(shape, self.number), width, color, Some(color)))
+                Some(Operator::new(
+                    ToolType::Number(shape, self.number),
+                    width,
+                    color,
+                    Some(color),
+                ))
             }
             Tool::Emoji => todo!(),
             Tool::Text => todo!(),
             Tool::Masaic => todo!(),
             Tool::Pin => todo!(),
+            Tool::Copy => todo!(),
+            Tool::Save => todo!(),
         }
     }
 }
