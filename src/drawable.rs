@@ -30,6 +30,7 @@ impl DrawImage for Operator {
                 draw_ellipse_on_image(self, img, &ellipse);
                 draw_text(img, c.center, &n.to_string(), c.radius, font, true);
             },
+            ToolType::Text { .. } => todo!(),
         }
     }
 }

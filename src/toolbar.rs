@@ -207,26 +207,40 @@ impl Mul<StrokeWidth> for f32 {
         self * base
     }
 }
+#[derive(Debug, Default, Clone)]
+pub struct TextEditState {
+    pub pos: Pos2,
+    pub content: String,
+}
 
 /// 当前选择的工具信息及事件相关属性
 #[derive(Debug, Default, Clone)]
 pub struct ToolInfo {
     pub tool: Tool,
-    stroke_width: StrokeWidth,
-    color: Color32,
-    start_pos: Option<Pos2>,
-    end_pos: Option<Pos2>,
-    tracks: Vec<Option<Pos2>>,
+    pub stroke_width: StrokeWidth,
+    pub color: Color32,
+    pub start_pos: Option<Pos2>,
+    pub end_pos: Option<Pos2>,
+    pub tracks: Vec<Option<Pos2>>,
     pub number: u8,
+    pub text_editing: Option<TextEditState>,
 }
 
 impl ToolInfo {
     pub fn new(color: Color32) -> Self {
-        Self { color, ..Default::default() }
+        Self {
+            color,
+            ..Default::default()
+        }
     }
 
-    /// 拖动事件
-    pub fn drag_event(&mut self, helper: &AppHelper, ui: &Ui, response: &Response) -> Option<Operator> {
+    /// 事件：拖动，点击..
+    pub fn input_event(
+        &mut self,
+        helper: &AppHelper,
+        ui: &mut Ui,
+        response: &Response,
+    ) -> Option<Operator> {
         match self.tool {
             Tool::Select => {}
             Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
@@ -274,16 +288,31 @@ impl ToolInfo {
                 }
             }
             Tool::Emoji => {}
-            Tool::Text => {}
+            Tool::Text => {
+                if self.text_editing.is_none() && response.clicked_by(PointerButton::Primary) {
+                    if let Some(point) = response.interact_pointer_pos() {
+                        let img_pos = helper.screen_to_image(point, None);
+                        self.text_editing = Some(TextEditState {
+                            pos: img_pos,
+                            content: String::new(),
+                        });
+                    }
+                }
+            }
             Tool::Masaic => {}
             Tool::Pin => {}
-            Tool::Copy => {},
-            Tool::Save => {},
+            Tool::Copy => {}
+            Tool::Save => {}
         }
         None
     }
 
-    pub fn drag_event_process(&self, helper: &AppHelper, painter: &Painter, response: &Response) {
+    pub fn input_event_process(
+        &mut self,
+        helper: &AppHelper,
+        painter: &Painter,
+        response: &Response,
+    ) {
         match self.tool {
             Tool::Select => {}
             Tool::Rectangle | Tool::Circle | Tool::Line | Tool::Arrow => {
@@ -400,7 +429,7 @@ impl ToolInfo {
                 ))
             }
             Tool::Emoji => todo!(),
-            Tool::Text => todo!(),
+            Tool::Text => None, // 需要等输入完成后才创建 Operator
             Tool::Masaic => todo!(),
             Tool::Pin => todo!(),
             Tool::Copy => todo!(),

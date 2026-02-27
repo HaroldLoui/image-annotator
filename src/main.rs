@@ -216,6 +216,8 @@ impl App for AnnotatorApp {
                 let image_rect = Rect::from_min_size(available.min + self.pan, image_size);
                 self.last_image_rect = Some(image_rect);
 
+                let helper = AppHelper::from_app(self);
+
                 // 绘制图片
                 painter.image(
                     texture.id(),
@@ -232,7 +234,47 @@ impl App for AnnotatorApp {
                     self.pan += response.drag_delta();
                 }
 
-                let helper = AppHelper::from_app(self);
+                // 读取输入法输入的文字
+                if self.current_tool_info.tool == Tool::Text {
+                    if let Some(editing) = &mut self.current_tool_info.text_editing {
+                        let screen_pos = helper.image_to_screen(editing.pos);
+                        let font_size = 16.0 * self.zoom;
+                
+                        // TextEdit 放在点击位置，承载输入法
+                        let edit_rect = Rect::from_min_size(screen_pos, Vec2::new(200.0, font_size + 8.0));
+                        let text_edit = egui::TextEdit::singleline(&mut editing.content)
+                            .font(egui::FontId::proportional(font_size))
+                            .frame(false)
+                            .desired_width(200.0)
+                            .text_color(self.current_tool_info.color);
+                
+                        let output = ui.put(edit_rect, text_edit);
+                        // 获得焦点
+                        output.request_focus();
+                        if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            let content = editing.content.clone();
+                            let pos = editing.pos;
+                            if !content.is_empty() {
+                                let op = Operator::new(
+                                    ToolType::Text { pos, content },
+                                    self.current_tool_info.stroke_width,
+                                    self.current_tool_info.color,
+                                    None,
+                                );
+                                self.operators.push(op);
+                            }
+                            self.current_tool_info.text_editing = None;
+                        }
+                
+                        // Escape 取消
+                        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            self.current_tool_info.text_editing = None;
+                        }
+                    }
+                } else {
+                    self.current_tool_info.text_editing = None;
+                }
+
                 if let Some(pos) = response.hover_pos() {
                     let image_pos = helper.screen_to_image(pos, None);
 
@@ -249,8 +291,8 @@ impl App for AnnotatorApp {
                     self.reset_view(response.rect);
                 }
 
-                // 根据工具进行拖拽绘制
-                if let Some(op) = self.current_tool_info.drag_event(&helper, ui, &response) {
+                // 根据工具进行绘制
+                if let Some(op) = self.current_tool_info.input_event(&helper, ui, &response) {
                     self.operators.push(op);
                 }
 
@@ -259,8 +301,8 @@ impl App for AnnotatorApp {
                     op.draw(&helper, &painter);
                 }
 
-                // 画拖动过程
-                self.current_tool_info.drag_event_process(&helper, &painter, &response);
+                // 画绘制过程
+                self.current_tool_info.input_event_process(&helper, &painter, &response);
             } else {
                 // 显示 loading
                 ui.centered_and_justified(|ui| {
